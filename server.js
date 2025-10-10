@@ -8,6 +8,9 @@ const webhookRoutes = require('./routes/webhook');
 const triggerRoutes = require('./routes/triggers');
 const whatsappRoutes = require('./routes/whatsapp');
 const messageLibraryRoutes = require('./routes/messageLibrary');
+const patientRoutes = require('./routes/patients');
+const doctorRoutes = require('./routes/doctors');
+const flowRoutes = require('./routes/flows');
 
 const app = express();
 
@@ -59,6 +62,9 @@ app.use('/webhook', webhookRoutes);
 app.use('/api/triggers', triggerRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/message-library', messageLibraryRoutes);
+app.use('/api/patients', patientRoutes);
+app.use('/api/doctors', doctorRoutes);
+app.use('/api/flows', flowRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -70,6 +76,9 @@ app.get('/', (req, res) => {
       triggers: '/api/triggers',
       whatsapp: '/api/whatsapp',
       messageLibrary: '/api/message-library',
+      patients: '/api/patients',
+      doctors: '/api/doctors',
+      flows: '/api/flows',
       health: '/health'
     }
   });

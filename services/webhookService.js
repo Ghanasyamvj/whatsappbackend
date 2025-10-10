@@ -1,6 +1,9 @@
 const { sendFlowMessage } = require('./whatsappService');
 const { findMatchingTrigger } = require('./triggerService');
 const messageLibraryService = require('./messageLibraryService');
+const patientService = require('./patientService');
+const doctorService = require('./doctorService');
+const flowService = require('./flowService');
 
 /**
  * Process incoming webhook payload from WhatsApp Business API
@@ -154,26 +157,215 @@ async function handleFlowResponse(message) {
         body: response.body
       });
       
-      // Here you can process the flow response data
-      // For example:
-      // - Store response in database
-      // - Trigger follow-up actions
-      // - Send confirmation messages
-      // - Update customer records
-      
-      // Example: Parse and log form data
+      // Parse form data
+      let formData = {};
       try {
-        const formData = JSON.parse(response.response_json);
+        formData = JSON.parse(response.response_json);
         console.log('📊 Parsed form data:', formData);
-        
-        // You can add custom logic here based on the form response
-        
       } catch (parseError) {
         console.log('⚠️  Could not parse flow response JSON:', response.response_json);
+        return;
       }
+
+      // Store flow response in Firebase
+      const flowResponseData = {
+        userPhone: message.from,
+        flowName: response.name,
+        response: formData,
+        responseType: 'flow_completion',
+        rawResponse: response.response_json,
+        messageId: message.id
+      };
+
+      try {
+        const savedResponse = await flowService.createFlowResponse(flowResponseData);
+        console.log('✅ Flow response saved to Firebase:', savedResponse.id);
+      } catch (error) {
+        console.error('❌ Failed to save flow response:', error);
+      }
+
+      // Process specific flow types
+      await processFlowByType(response.name, formData, message.from);
+      
     }
   } catch (error) {
     console.error('❌ Error handling flow response:', error);
+  }
+}
+
+/**
+ * Process flow responses based on flow type
+ */
+async function processFlowByType(flowName, formData, userPhone) {
+  try {
+    console.log(`🔄 Processing flow type: ${flowName}`);
+
+    if (flowName.toLowerCase().includes('appointment')) {
+      await processAppointmentFlow(formData, userPhone);
+    } else if (flowName.toLowerCase().includes('symptom')) {
+      await processSymptomFlow(formData, userPhone);
+    } else if (flowName.toLowerCase().includes('registration')) {
+      await processRegistrationFlow(formData, userPhone);
+    } else {
+      console.log(`📝 No specific processor for flow: ${flowName}`);
+    }
+  } catch (error) {
+    console.error('❌ Error processing flow by type:', error);
+  }
+}
+
+/**
+ * Process appointment booking flow
+ */
+async function processAppointmentFlow(formData, userPhone) {
+  try {
+    console.log('📅 Processing appointment booking flow');
+
+    // Extract appointment data
+    const specialization = formData.specialization || 'general';
+    const patientName = formData.name || formData.patient_name;
+    const preferredDate = formData.date || formData.preferred_date;
+
+    // Find or create patient
+    let patient = await patientService.getPatientByPhone(userPhone);
+    if (!patient && patientName) {
+      patient = await patientService.createPatient({
+        name: patientName,
+        phoneNumber: userPhone
+      });
+      console.log('✅ Created new patient:', patient.name);
+    }
+
+    // Find available doctor
+    const doctors = await doctorService.getDoctorsBySpecialization(specialization);
+    if (doctors.length > 0) {
+      const assignedDoctor = doctors[0]; // Simple assignment logic
+      
+      // Create message with appointment details
+      const appointmentMessage = {
+        userPhone: userPhone,
+        messageType: 'text',
+        content: `🏥 Appointment Booked!\n\n👤 Patient: ${patientName}\n👨‍⚕️ Doctor: ${assignedDoctor.name}\n🏥 Department: ${assignedDoctor.specialization}\n📞 Contact: ${assignedDoctor.phoneNumber}\n\nYour appointment has been scheduled. The doctor will contact you soon.`,
+        patientId: patient?.id,
+        doctorId: assignedDoctor.id,
+        isResponse: false
+      };
+
+      await flowService.createMessageWithFlow(appointmentMessage);
+      console.log('✅ Appointment confirmation message created');
+    } else {
+      // No doctors available
+      const noDocMessage = {
+        userPhone: userPhone,
+        messageType: 'text',
+        content: `⚠️ Sorry, no doctors are currently available for ${specialization}. Please try again later or contact our reception.`,
+        patientId: patient?.id,
+        isResponse: false
+      };
+
+      await flowService.createMessageWithFlow(noDocMessage);
+    }
+  } catch (error) {
+    console.error('❌ Error processing appointment flow:', error);
+  }
+}
+
+/**
+ * Process symptom checker flow
+ */
+async function processSymptomFlow(formData, userPhone) {
+  try {
+    console.log('🩺 Processing symptom checker flow');
+
+    const symptoms = formData.symptoms || [];
+    const urgency = formData.urgency || 'normal';
+
+    // Find or get patient
+    let patient = await patientService.getPatientByPhone(userPhone);
+    
+    // Add symptoms to medical history if patient exists
+    if (patient && symptoms.length > 0) {
+      const historyEntry = {
+        type: 'symptom_report',
+        symptoms: symptoms,
+        urgency: urgency,
+        reportedVia: 'whatsapp_flow',
+        needsFollowUp: urgency === 'urgent'
+      };
+
+      await patientService.addMedicalHistory(patient.id, historyEntry);
+      console.log('✅ Symptoms added to patient medical history');
+    }
+
+    // Determine response based on urgency
+    let responseMessage = '';
+    if (urgency === 'urgent') {
+      responseMessage = `🚨 URGENT: Based on your symptoms, please seek immediate medical attention. Call emergency services or visit the nearest hospital.\n\n📞 Emergency: 911\n🏥 Hospital: [Hospital Address]`;
+    } else {
+      responseMessage = `🩺 Thank you for reporting your symptoms. Based on your input:\n\n${symptoms.map(s => `• ${s}`).join('\n')}\n\nWe recommend scheduling an appointment with a doctor. Would you like to book an appointment now?`;
+    }
+
+    const symptomResponseMessage = {
+      userPhone: userPhone,
+      messageType: 'text',
+      content: responseMessage,
+      patientId: patient?.id,
+      isResponse: false
+    };
+
+    await flowService.createMessageWithFlow(symptomResponseMessage);
+    console.log('✅ Symptom response message created');
+  } catch (error) {
+    console.error('❌ Error processing symptom flow:', error);
+  }
+}
+
+/**
+ * Process patient registration flow
+ */
+async function processRegistrationFlow(formData, userPhone) {
+  try {
+    console.log('📝 Processing patient registration flow');
+
+    const patientData = {
+      name: formData.name || formData.full_name,
+      phoneNumber: userPhone,
+      email: formData.email,
+      dateOfBirth: formData.date_of_birth || formData.dob,
+      gender: formData.gender,
+      address: formData.address,
+      emergencyContact: {
+        name: formData.emergency_contact_name,
+        phoneNumber: formData.emergency_contact_phone,
+        relationship: formData.emergency_contact_relationship
+      }
+    };
+
+    // Check if patient already exists
+    let patient = await patientService.getPatientByPhone(userPhone);
+    
+    if (patient) {
+      // Update existing patient
+      patient = await patientService.updatePatient(patient.id, patientData);
+      console.log('✅ Updated existing patient:', patient.name);
+    } else {
+      // Create new patient
+      patient = await patientService.createPatient(patientData);
+      console.log('✅ Created new patient:', patient.name);
+    }
+
+    const registrationMessage = {
+      userPhone: userPhone,
+      messageType: 'text',
+      content: `✅ Registration Complete!\n\n👤 Name: ${patient.name}\n📞 Phone: ${patient.phoneNumber}\n📧 Email: ${patient.email || 'Not provided'}\n\nYour patient profile has been ${patient.id ? 'updated' : 'created'}. You can now book appointments and access our services.`,
+      patientId: patient.id,
+      isResponse: false
+    };
+
+    await flowService.createMessageWithFlow(registrationMessage);
+    console.log('✅ Registration confirmation message created');
+  } catch (error) {
+    console.error('❌ Error processing registration flow:', error);
   }
 }
 
@@ -276,5 +468,9 @@ module.exports = {
   handleFlowResponse,
   handleMessageStatus,
   simulateWebhook,
-  simulateInteractiveWebhook
+  simulateInteractiveWebhook,
+  processFlowByType,
+  processAppointmentFlow,
+  processSymptomFlow,
+  processRegistrationFlow
 };

@@ -125,6 +125,14 @@ Flow Builder Dashboard                 Backend API Server
 - **Form Processing**: Handle user submissions and responses
 - **Multi-trigger Support**: Different keywords trigger different flows
 
+### 🏥 **Hospital Management System**
+
+- **Patient Management**: Complete patient registration and profile management
+- **Doctor Management**: Doctor profiles, specializations, and availability
+- **Appointment Booking**: Automated appointment scheduling through WhatsApp flows
+- **Medical History**: Track patient symptoms and medical records
+- **Flow Integration**: Connect WhatsApp flows with hospital database
+
 ### 🔒 **Security & Reliability**
 
 - **Webhook Verification**: Secure Meta webhook validation
@@ -189,6 +197,14 @@ WHATSAPP_BUSINESS_NUMBER=15550617327  # Your actual business number
 
 # Webhook Configuration
 WEBHOOK_VERIFY_TOKEN=mywebhooktoken123  # Choose a secure token
+
+# Firebase Configuration (for Hospital Management)
+FIREBASE_PROJECT_ID=your_firebase_project_id
+FIREBASE_PRIVATE_KEY_ID=your_firebase_private_key_id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour_firebase_private_key\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=your_firebase_client_email
+FIREBASE_CLIENT_ID=your_firebase_client_id
+FIREBASE_CLIENT_CERT_URL=your_firebase_client_cert_url
 
 # Server Configuration
 PORT=3001
@@ -477,6 +493,52 @@ POST /api/whatsapp/send-flow
   "flowId": "772936888895590",
   "message": "Please complete this form:"
 }
+```
+
+#### **6. Hospital Management** 🏥
+
+##### Patient Management
+
+```http
+GET /api/patients
+POST /api/patients
+GET /api/patients/:id
+PUT /api/patients/:id
+DELETE /api/patients/:id
+GET /api/patients/phone/:phoneNumber
+GET /api/patients/search/:searchTerm
+POST /api/patients/:id/medical-history
+```
+
+##### Doctor Management
+
+```http
+GET /api/doctors
+POST /api/doctors
+GET /api/doctors/:id
+PUT /api/doctors/:id
+DELETE /api/doctors/:id
+GET /api/doctors/phone/:phoneNumber
+GET /api/doctors/specialization/:specialization
+GET /api/doctors/available/list
+PATCH /api/doctors/:id/availability
+POST /api/doctors/:id/schedule
+```
+
+##### Flow Management
+
+```http
+GET /api/flows
+POST /api/flows
+GET /api/flows/:id
+PUT /api/flows/:id
+DELETE /api/flows/:id
+POST /api/flows/responses
+GET /api/flows/:id/responses
+GET /api/flows/responses/user/:phoneNumber
+POST /api/flows/messages
+GET /api/flows/:id/messages
+GET /api/flows/messages/user/:phoneNumber
 ```
 
 - `hub.verify_token` - Your webhook verify token
