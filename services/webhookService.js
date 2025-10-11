@@ -523,6 +523,16 @@ async function processRegistrationFlow(formData, userPhone) {
 
     await flowService.createMessageWithFlow(registrationMessage);
     console.log('✅ Registration confirmation message created');
+    // Send welcome interactive menu after registration completes
+    try {
+      const welcomeMsg = messageLibraryService.getMessageById('msg_welcome_interactive');
+      if (welcomeMsg && welcomeMsg.status === 'published') {
+        await messageLibraryService.sendLibraryMessage(welcomeMsg, userPhone);
+        console.log('📤 Sent welcome interactive message after registration to', userPhone);
+      }
+    } catch (err) {
+      console.error('⚠️ Failed to send welcome message after registration:', err.message || err);
+    }
   } catch (error) {
     console.error('❌ Error processing registration flow:', error);
   }
