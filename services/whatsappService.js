@@ -59,6 +59,9 @@ class WhatsAppService {
     try {
       const url = `${this.baseUrl}/${this.phoneNumberId}/messages`;
       
+      // Determine flow token up-front to avoid referencing payload during construction
+      const effectiveFlowToken = flowToken || `flow_token_${Date.now()}`;
+
       // CORRECTED WhatsApp Flow message format
       const payload = {
         messaging_product: 'whatsapp',
@@ -77,12 +80,12 @@ class WhatsAppService {
           footer: {
             text: 'Powered by WhatsApp Flows'
           },
-          action: {
+              action: {
             name: 'flow',
             parameters: {
               flow_message_version: '3',
-              flow_token: flowToken || `flow_token_${Date.now()}`,
-              flow_id: flowId,
+                  flow_token: effectiveFlowToken,
+                  flow_id: flowId,
               flow_cta: 'Open Form',
               flow_action: 'navigate',
               flow_action_payload: {
@@ -91,8 +94,8 @@ class WhatsAppService {
                   user_name: '',
                   user_phone: phoneNumber,
                   form_type: 'registration',
-                  flow_id: flowId,
-                  flow_token: flowToken || payload?.interactive?.action?.parameters?.flow_token || null,
+                      flow_id: flowId,
+                      flow_token: effectiveFlowToken,
                   timestamp: new Date().toISOString()
                 }
               }
@@ -124,7 +127,7 @@ class WhatsAppService {
         messageId: response.data.messages?.[0]?.id,
         phoneNumber,
         flowId,
-        flowToken: payload.interactive.action.parameters.flow_token,
+        flowToken: effectiveFlowToken,
         timestamp: new Date().toISOString()
       };
 
@@ -187,7 +190,9 @@ const whatsappService = new WhatsAppService();
  * Send flow message (exported function)
  */
 async function sendFlowMessage(phoneNumber, flowId, message) {
-  return await whatsappService.sendFlowMessage(phoneNumber, flowId, message);
+  // allow optional fourth parameter flowToken
+  const flowToken = arguments.length > 3 ? arguments[3] : null;
+  return await whatsappService.sendFlowMessage(phoneNumber, flowId, message, flowToken);
 }
 
 /**
