@@ -289,6 +289,49 @@ async function handleFlowResponse(message) {
         console.error('❌ Failed to save flow response:', error);
       }
 
+      // Upsert patient from flow data if possible (map fields)
+      try {
+        const form = formData || {};
+        const possibleName = form.name || form.full_name || form.text_input || form.patient_name || form['text_input'];
+        const possibleGenderRaw = form.Choose_one || form.choose_one || form.gender || form.sex;
+        let gender;
+        if (possibleGenderRaw) {
+          const s = String(possibleGenderRaw).toLowerCase();
+          // Your rule: "0_Yes" means male, otherwise female. Also accept 'male'/'m'/'yes'
+          if (s.includes('0_') || s.includes('yes') || s.includes('male') || s === 'm') {
+            gender = 'male';
+          } else {
+            gender = 'female';
+          }
+        }
+
+        if (possibleName || gender) {
+          const phone = message.from || form.userPhone || form.user_phone;
+          try {
+            let patient = await patientService.getPatientByPhone(phone);
+            const updateData = {};
+            if (possibleName) updateData.name = possibleName;
+            if (gender) updateData.gender = gender;
+            if (form.email) updateData.email = form.email;
+            if (form.date_of_birth || form.dob) updateData.dob = form.date_of_birth || form.dob;
+
+            if (Object.keys(updateData).length > 0) {
+              if (patient) {
+                await patientService.updatePatient(patient.id, updateData);
+                console.log('✅ Updated patient from flow:', patient.id);
+              } else {
+                const created = await patientService.createPatient({ ...updateData, phoneNumber: phone });
+                console.log('✅ Created patient from flow:', created.id);
+              }
+            }
+          } catch (err) {
+            console.error('⚠️ Failed to upsert patient from flow data:', err.message || err);
+          }
+        }
+      } catch (err) {
+        console.error('⚠️ Error processing patient upsert from flow:', err.message || err);
+      }
+
       // Process specific flow types
       await processFlowByType(response.name, formData, message.from);
       

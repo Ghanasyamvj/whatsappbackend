@@ -91,6 +91,8 @@ class WhatsAppService {
                   user_name: '',
                   user_phone: phoneNumber,
                   form_type: 'registration',
+                  flow_id: flowId,
+                  flow_token: flowToken || payload?.interactive?.action?.parameters?.flow_token || null,
                   timestamp: new Date().toISOString()
                 }
               }
