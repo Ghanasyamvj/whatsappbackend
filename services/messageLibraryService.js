@@ -1,4 +1,6 @@
 const axios = require('axios');
+const doctorService = require('./doctorService');
+const { db } = require('../config/firebase');
 
 // Message Library Integration Service
 class MessageLibraryService {
@@ -573,6 +575,12 @@ class MessageLibraryService {
 
   // Send message using WhatsApp API
   async sendLibraryMessage(messageEntry, recipientPhone) {
+    // Allow dynamic enrichment of certain messages from Firestore
+    try {
+      messageEntry = await this.buildDynamicMessage(messageEntry);
+    } catch (err) {
+      console.error('Error enriching messageEntry with dynamic data:', err);
+    }
     const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
     const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v22.0';
@@ -716,6 +724,66 @@ class MessageLibraryService {
     
     this.triggers.push(newTrigger);
     return newTrigger;
+  }
+
+  // Build dynamic message content by fetching from Firestore where applicable
+  async buildDynamicMessage(messageEntry) {
+    // Clone to avoid mutating original
+    const entry = JSON.parse(JSON.stringify(messageEntry));
+
+    // If this is the doctor selection list, fetch doctors from Firestore
+    if (entry.messageId === 'msg_doctor_selection' || entry.name?.toLowerCase().includes('doctor')) {
+      try {
+        const doctorsSnapshot = await db.collection('doctors').where('isActive', '==', true).get();
+        const rows = [];
+        doctorsSnapshot.forEach(doc => {
+          const d = doc.data();
+          rows.push({
+            rowId: doc.id,
+            title: d.name || 'Unknown',
+            description: d.specialization ? `${d.specialization}` : (d.description || ''),
+            triggerId: `trigger_dr_${doc.id}`,
+            nextAction: 'send_message',
+            targetMessageId: 'msg_sharma_slots_interactive'
+          });
+        });
+
+        if (entry.contentPayload && entry.contentPayload.sections && entry.contentPayload.sections.length) {
+          entry.contentPayload.sections[0].rows = rows;
+        } else {
+          entry.contentPayload = entry.contentPayload || {};
+          entry.contentPayload.sections = [{ title: 'Doctors', rows }];
+        }
+      } catch (err) {
+        console.error('Failed to load doctors from Firestore:', err.message || err);
+      }
+    }
+
+    // If this is the lab list, fetch labs
+    if (entry.messageId === 'msg_lab_interactive' || entry.name?.toLowerCase().includes('lab')) {
+      try {
+        const labsSnapshot = await db.collection('labs').get();
+        const rows = [];
+        labsSnapshot.forEach(doc => {
+          const l = doc.data();
+          rows.push({
+            rowId: doc.id,
+            title: l.name || 'Lab Test',
+            description: l.description || '',
+            triggerId: `trigger_lab_${doc.id}`,
+            nextAction: 'send_message',
+            targetMessageId: 'msg_blood_sugar_booking'
+          });
+        });
+
+        entry.contentPayload = entry.contentPayload || {};
+        entry.contentPayload.sections = [{ title: 'Lab Tests', rows }];
+      } catch (err) {
+        console.error('Failed to load labs from Firestore:', err.message || err);
+      }
+    }
+
+    return entry;
   }
 }
 
