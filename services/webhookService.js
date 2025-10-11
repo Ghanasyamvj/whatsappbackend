@@ -322,6 +322,17 @@ async function handleFlowResponse(message) {
               } else {
                 const created = await patientService.createPatient({ ...updateData, phoneNumber: phone });
                 console.log('✅ Created patient from flow:', created.id);
+
+                // After creating a new patient, send the welcome interactive message
+                try {
+                  const welcomeMsg = messageLibraryService.getMessageById('msg_welcome_interactive');
+                  if (welcomeMsg && welcomeMsg.status === 'published') {
+                    await messageLibraryService.sendLibraryMessage(welcomeMsg, phone);
+                    console.log('📤 Welcome interactive message sent to new patient:', phone);
+                  }
+                } catch (err) {
+                  console.error('⚠️ Failed to send welcome message to new patient:', err.message || err);
+                }
               }
             }
           } catch (err) {
