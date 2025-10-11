@@ -16,6 +16,7 @@ class PatientService {
       };
 
       const docRef = await this.collection.add(patient);
+      console.info('Created patient', { id: docRef.id, phoneNumber: patient.phoneNumber, timestamp: new Date().toISOString() });
       return { id: docRef.id, ...patient };
     } catch (error) {
       console.error('Error creating patient:', error);
@@ -40,18 +41,34 @@ class PatientService {
   // Get patient by phone number
   async getPatientByPhone(phoneNumber) {
     try {
+      // Try exact match first
       const snapshot = await this.collection
         .where('phoneNumber', '==', phoneNumber)
         .where('isActive', '==', true)
         .limit(1)
         .get();
 
-      if (snapshot.empty) {
-        return null;
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        return { id: doc.id, ...doc.data() };
       }
 
-      const doc = snapshot.docs[0];
-      return { id: doc.id, ...doc.data() };
+      // Fallback: normalize digits and compare last 10 digits (helps when formats differ)
+      const digits = (phoneNumber || '').replace(/\D/g, '');
+      const last10 = digits.slice(-10);
+
+      if (!last10) return null;
+
+      const allSnapshot = await this.collection.where('isActive', '==', true).get();
+      for (const d of allSnapshot.docs) {
+        const p = d.data();
+        const pDigits = (p.phoneNumber || '').toString().replace(/\D/g, '');
+        if (pDigits.slice(-10) === last10) {
+          return { id: d.id, ...p };
+        }
+      }
+
+      return null;
     } catch (error) {
       console.error('Error getting patient by phone:', error);
       throw error;
@@ -66,6 +83,7 @@ class PatientService {
         updatedAt: new Date()
       };
 
+      console.info('Updating patient', { id: patientId, changes: Object.keys(updateData), timestamp: new Date().toISOString() });
       await this.collection.doc(patientId).update(updatePayload);
       return await this.getPatientById(patientId);
     } catch (error) {
@@ -126,6 +144,7 @@ class PatientService {
   // Soft delete patient
   async deletePatient(patientId) {
     try {
+      console.warn('Soft-deleting patient', { id: patientId, timestamp: new Date().toISOString() });
       await this.collection.doc(patientId).update({
         isActive: false,
         deletedAt: new Date(),

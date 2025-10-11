@@ -327,8 +327,12 @@ async function handleFlowResponse(message) {
                 try {
                   const welcomeMsg = messageLibraryService.getMessageById('msg_welcome_interactive');
                   if (welcomeMsg && welcomeMsg.status === 'published') {
-                    await messageLibraryService.sendLibraryMessage(welcomeMsg, phone);
-                    console.log('📤 Welcome interactive message sent to new patient:', phone);
+                    try {
+                      const sendResult = await messageLibraryService.sendLibraryMessage(welcomeMsg, phone);
+                      console.log('📤 Welcome interactive message sent to new patient:', phone, 'response:', sendResult.data || sendResult);
+                    } catch (sendErr) {
+                      console.error('⚠️ Failed to send welcome message to new patient. Error detail:', sendErr.response?.data || sendErr.message || sendErr);
+                    }
                   }
                 } catch (err) {
                   console.error('⚠️ Failed to send welcome message to new patient:', err.message || err);
@@ -527,8 +531,12 @@ async function processRegistrationFlow(formData, userPhone) {
     try {
       const welcomeMsg = messageLibraryService.getMessageById('msg_welcome_interactive');
       if (welcomeMsg && welcomeMsg.status === 'published') {
-        await messageLibraryService.sendLibraryMessage(welcomeMsg, userPhone);
-        console.log('📤 Sent welcome interactive message after registration to', userPhone);
+        try {
+          const sendResult = await messageLibraryService.sendLibraryMessage(welcomeMsg, userPhone);
+          console.log('📤 Sent welcome interactive message after registration to', userPhone, 'response:', sendResult.data || sendResult);
+        } catch (sendErr) {
+          console.error('⚠️ Failed to send welcome message after registration. Error detail:', sendErr.response?.data || sendErr.message || sendErr);
+        }
       }
     } catch (err) {
       console.error('⚠️ Failed to send welcome message after registration:', err.message || err);
