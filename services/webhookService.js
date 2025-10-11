@@ -4,7 +4,6 @@ const { findMatchingTrigger } = require('./triggerService');
 const messageLibraryService = require('./messageLibraryService');
 const patientService = require('./patientService');
 const doctorService = require('./doctorService');
-const flowService = require('./flowService');
 
 /**
  * Process incoming webhook payload from WhatsApp Business API
