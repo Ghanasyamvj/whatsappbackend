@@ -1,4 +1,5 @@
 const { sendFlowMessage } = require('./whatsappService');
+const flowService = require('./flowService');
 const { findMatchingTrigger } = require('./triggerService');
 const messageLibraryService = require('./messageLibraryService');
 const patientService = require('./patientService');
@@ -70,7 +71,7 @@ async function handleIncomingMessage(message) {
       console.log(`🎯 Found ${matchingTriggers.length} matching trigger(s)`);
       
       for (const trigger of matchingTriggers) {
-        if (trigger.nextAction === 'send_message') {
+          if (trigger.nextAction === 'send_message') {
           // Get the message from library
           const messageEntry = messageLibraryService.getMessageById(trigger.targetId);
           
@@ -87,9 +88,22 @@ async function handleIncomingMessage(message) {
             console.log(`⚠️  Message ${trigger.targetId} not found or not published`);
           }
         } else if (trigger.nextAction === 'start_flow') {
-          // Fallback to old flow system for flow triggers
-          console.log(`🔄 Starting flow: ${trigger.targetId}`);
-          await sendFlowMessage(message.from, trigger.targetId, 'Please complete this form:');
+          // Start a tracked flow: create a tracking record, then send flow with token
+          try {
+            console.log(`🔄 Starting tracked flow: ${trigger.targetId}`);
+            const flowToken = `flow_token_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+            // create tracking record
+            await flowService.createFlowTracking({
+              userPhone: message.from,
+              flowId: trigger.targetId,
+              flowToken,
+              status: 'sent'
+            });
+            // send flow with token
+            await sendFlowMessage(message.from, trigger.targetId, 'Please complete this form:', flowToken);
+          } catch (err) {
+            console.error('❌ Failed to start tracked flow:', err.message || err);
+          }
         }
       }
     } else {
@@ -99,8 +113,14 @@ async function handleIncomingMessage(message) {
       const oldTrigger = findMatchingTrigger(messageText);
       if (oldTrigger && oldTrigger.isActive) {
         console.log(`🔄 Using legacy trigger: "${oldTrigger.keyword}" -> Flow: ${oldTrigger.flowId}`);
-        await sendFlowMessage(message.from, oldTrigger.flowId, oldTrigger.message);
-        console.log(`✅ Successfully sent legacy flow ${oldTrigger.flowId} to ${message.from}`);
+        const flowToken = `flow_token_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+        try {
+          await flowService.createFlowTracking({ userPhone: message.from, flowId: oldTrigger.flowId, flowToken, status: 'sent' });
+          await sendFlowMessage(message.from, oldTrigger.flowId, oldTrigger.message, flowToken);
+          console.log(`✅ Successfully sent legacy flow ${oldTrigger.flowId} to ${message.from}`);
+        } catch (err) {
+          console.error('❌ Failed to send legacy tracked flow:', err.message || err);
+        }
       }
     }
   } catch (error) {
@@ -117,25 +137,40 @@ async function handleInteractiveResponse(message) {
     console.log(`🔘 Processing interactive response from ${message.from}:`, message.interactive);
     
     const result = messageLibraryService.processInteractiveResponse(message.interactive);
-    
-    if (result && result.nextMessage) {
-      console.log(`📤 Sending next message: "${result.nextMessage.name}" to ${message.from}`);
-      
-      try {
-        await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
-        console.log(`✅ Successfully sent interactive response message to ${message.from}`);
-      } catch (error) {
-        console.error(`❌ Failed to send interactive response message:`, error.message);
+
+    if (result && result.trigger) {
+      const trigger = result.trigger;
+      // If trigger asks to send a library message
+      if (trigger.nextAction === 'send_message' && result.nextMessage) {
+        console.log(`📤 Sending next message: "${result.nextMessage.name}" to ${message.from}`);
+        try {
+          await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+          console.log(`✅ Successfully sent interactive response message to ${message.from}`);
+        } catch (error) {
+          console.error(`❌ Failed to send interactive response message:`, error.message);
+        }
+        return;
       }
-    } else {
-      console.log(`📝 No matching trigger found for interactive response from ${message.from}`);
-      
-      // Send a fallback message
-      const fallbackMessage = messageLibraryService.getMessageById('msg_welcome_interactive');
-      if (fallbackMessage) {
-        console.log(`🔄 Sending fallback welcome message to ${message.from}`);
-        await messageLibraryService.sendLibraryMessage(fallbackMessage, message.from);
+
+      // If trigger asks to start a WhatsApp Flow
+      if (trigger.nextAction === 'start_flow' && trigger.targetId) {
+        try {
+          console.log(`🔄 Trigger requests starting flow ${trigger.targetId} for ${message.from}`);
+          await sendFlowMessage(message.from, trigger.targetId, 'Please complete this form:');
+          console.log(`✅ Started flow ${trigger.targetId} for ${message.from}`);
+        } catch (err) {
+          console.error('❌ Failed to start flow from interactive trigger:', err.message || err);
+        }
+        return;
       }
+    }
+
+    console.log(`📝 No matching trigger found for interactive response from ${message.from}`);
+    // Send a fallback message
+    const fallbackMessage = messageLibraryService.getMessageById('msg_welcome_interactive');
+    if (fallbackMessage) {
+      console.log(`🔄 Sending fallback welcome message to ${message.from}`);
+      await messageLibraryService.sendLibraryMessage(fallbackMessage, message.from);
     }
   } catch (error) {
     console.error('❌ Error handling interactive response:', error);
@@ -167,10 +202,45 @@ async function handleFlowResponse(message) {
         return;
       }
 
-      // Store flow response in Firebase
+      // Attempt to map this response to a tracking record (by token or by latest sent)
+      let matchedFlowId = null;
+      try {
+        // Try to parse token from the response JSON/body (some flows include flow_token)
+        let possibleToken = null;
+        try {
+          const parsed = formData || {};
+          if (parsed.flow_token) possibleToken = parsed.flow_token;
+        } catch (e) {
+          // ignore
+        }
+
+        // If not found, try to inspect response.body for a token string
+        if (!possibleToken && response.body) {
+          const m = String(response.body).match(/flow_token_[0-9a-zA-Z_\-]*/i);
+          if (m) possibleToken = m[0];
+        }
+
+        let trackingQuery = null;
+        if (possibleToken) {
+          trackingQuery = (await flowService.flowTrackingsCollection.where('flowToken', '==', possibleToken).limit(1).get());
+        }
+
+        if (trackingQuery && trackingQuery.size === 1) {
+          matchedFlowId = trackingQuery.docs[0].data().flowId;
+        } else {
+          // fallback: fetch latest tracking for this user
+          const q = await flowService.flowTrackingsCollection.where('userPhone', '==', message.from).orderBy('createdAt', 'desc').limit(1).get();
+          if (!q.empty) matchedFlowId = q.docs[0].data().flowId;
+        }
+      } catch (err) {
+        console.error('❌ Error matching flow response to tracking:', err.message || err);
+      }
+
+      // Store flow response in Firebase (include matched flowId if found)
       const flowResponseData = {
         userPhone: message.from,
         flowName: response.name,
+        flowId: matchedFlowId,
         response: formData,
         responseType: 'flow_completion',
         rawResponse: response.response_json,
@@ -178,8 +248,44 @@ async function handleFlowResponse(message) {
       };
 
       try {
+        // Persist raw webhook message for audit
+        try {
+          await flowService.createWebhookMessage({ rawMessage: message });
+        } catch (err) {
+          console.error('⚠️  Failed to persist raw webhook message:', err.message || err);
+        }
+
         const savedResponse = await flowService.createFlowResponse(flowResponseData);
-        console.log('✅ Flow response saved to Firebase:', savedResponse.id);
+        console.log('✅ Flow response saved to Firebase:', savedResponse.id, 'mappedFlowId:', matchedFlowId);
+
+        // If we matched a flow tracking record, mark it completed
+        try {
+          // find the tracking doc used (by token or latest for user)
+          let trackingDoc = null;
+          if (flowResponseData.response && flowResponseData.response.flow_token) {
+            const tq = await flowService.flowTrackingsCollection.where('flowToken', '==', flowResponseData.response.flow_token).limit(1).get();
+            if (!tq.empty) trackingDoc = tq.docs[0];
+          }
+
+          if (!trackingDoc) {
+            const tq2 = await flowService.flowTrackingsCollection.where('userPhone', '==', message.from).orderBy('createdAt', 'desc').limit(1).get();
+            if (!tq2.empty) trackingDoc = tq2.docs[0];
+          }
+
+          if (trackingDoc) {
+            await flowService.completeFlowTracking(trackingDoc.id, { status: 'completed', responseId: savedResponse.id });
+          }
+        } catch (err) {
+          console.error('⚠️  Failed to mark flow tracking completed:', err.message || err);
+        }
+
+        // Send confirmation text to user
+        try {
+          const { sendTextMessage } = require('./whatsappService');
+          await sendTextMessage(message.from, 'Thanks — we received your response and saved it.');
+        } catch (err) {
+          console.error('⚠️  Failed to send confirmation message to user:', err.message || err);
+        }
       } catch (error) {
         console.error('❌ Failed to save flow response:', error);
       }

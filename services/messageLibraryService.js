@@ -511,9 +511,11 @@ class MessageLibraryService {
         triggerId: 'trigger_new_patient',
         triggerType: 'button_click',
         triggerValue: 'btn_new_patient',
-        nextAction: 'send_message',
-        targetId: 'msg_new_patient_form',
-        messageId: 'msg_new_patient_form',
+        // Start the WhatsApp Flow when user chooses New Patient
+        nextAction: 'start_flow',
+        // Use the flow id you requested
+        targetId: '1366099374850695',
+        messageId: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },

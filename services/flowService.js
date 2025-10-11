@@ -5,6 +5,8 @@ class FlowService {
     this.flowsCollection = db.collection('flows');
     this.flowResponsesCollection = db.collection('flowResponses');
     this.messagesCollection = db.collection('messages');
+    this.flowTrackingsCollection = db.collection('flowTrackings');
+    this.webhookMessagesCollection = db.collection('webhookMessages');
   }
 
   // Create a new flow
@@ -95,6 +97,56 @@ class FlowService {
       return { id: docRef.id, ...flowResponse };
     } catch (error) {
       console.error('Error creating flow response:', error);
+      throw error;
+    }
+  }
+
+  // Create a flow tracking record (used to map sent flow tokens -> flowId)
+  async createFlowTracking(trackingData) {
+    try {
+      const record = {
+        ...trackingData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const docRef = await this.flowTrackingsCollection.add(record);
+      return { id: docRef.id, ...record };
+    } catch (error) {
+      console.error('Error creating flow tracking record:', error);
+      throw error;
+    }
+  }
+
+  // Mark a flow tracking record as completed
+  async completeFlowTracking(trackingDocId, updateData = {}) {
+    try {
+      const updatePayload = {
+        ...updateData,
+        status: updateData.status || 'completed',
+        updatedAt: new Date()
+      };
+
+      await this.flowTrackingsCollection.doc(trackingDocId).update(updatePayload);
+      const doc = await this.flowTrackingsCollection.doc(trackingDocId).get();
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error('Error completing flow tracking:', error);
+      throw error;
+    }
+  }
+
+  // Persist raw webhook message for audit/debug
+  async createWebhookMessage(raw) {
+    try {
+      const payload = {
+        ...raw,
+        createdAt: new Date()
+      };
+      const docRef = await this.webhookMessagesCollection.add(payload);
+      return { id: docRef.id, ...payload };
+    } catch (error) {
+      console.error('Error creating webhook message record:', error);
       throw error;
     }
   }

@@ -51,7 +51,7 @@ class WhatsAppService {
   /**
    * Send flow message to a phone number - FIXED VERSION
    */
-  async sendFlowMessage(phoneNumber, flowId, message = 'Please complete this form:') {
+  async sendFlowMessage(phoneNumber, flowId, message = 'Please complete this form:', flowToken = null) {
     if (!this.accessToken || !this.phoneNumberId) {
       throw new Error('WhatsApp credentials not configured');
     }
@@ -81,7 +81,7 @@ class WhatsAppService {
             name: 'flow',
             parameters: {
               flow_message_version: '3',
-              flow_token: `flow_token_${Date.now()}`,
+              flow_token: flowToken || `flow_token_${Date.now()}`,
               flow_id: flowId,
               flow_cta: 'Open Form',
               flow_action: 'navigate',
@@ -122,6 +122,7 @@ class WhatsAppService {
         messageId: response.data.messages?.[0]?.id,
         phoneNumber,
         flowId,
+        flowToken: payload.interactive.action.parameters.flow_token,
         timestamp: new Date().toISOString()
       };
 
