@@ -734,10 +734,13 @@ class MessageLibraryService {
     // If this is the doctor selection list, fetch doctors from Firestore
     if (entry.messageId === 'msg_doctor_selection' || entry.name?.toLowerCase().includes('doctor')) {
       try {
-        const doctorsSnapshot = await db.collection('doctors').where('isActive', '==', true).get();
+        // seed script may not set isActive; fetch all and filter out explicit false
+        const doctorsSnapshot = await db.collection('doctors').get();
         const rows = [];
         doctorsSnapshot.forEach(doc => {
           const d = doc.data();
+          // include if isActive is missing or truthy
+          if (d.hasOwnProperty('isActive') && d.isActive === false) return;
           rows.push({
             rowId: doc.id,
             title: d.name || 'Unknown',
