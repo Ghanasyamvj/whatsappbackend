@@ -506,6 +506,27 @@ class MessageLibraryService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
+      // New / Existing patient button triggers
+      {
+        triggerId: 'trigger_new_patient',
+        triggerType: 'button_click',
+        triggerValue: 'btn_new_patient',
+        nextAction: 'send_message',
+        targetId: 'msg_new_patient_form',
+        messageId: 'msg_new_patient_form',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        triggerId: 'trigger_existing_patient',
+        triggerType: 'button_click',
+        triggerValue: 'btn_existing_patient',
+        nextAction: 'send_message',
+        targetId: 'msg_existing_patient_select',
+        messageId: 'msg_existing_patient_select',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
       // Keyword-based triggers - Updated to use interactive messages
       {
         triggerId: 'trigger_hi',
