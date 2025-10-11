@@ -45,6 +45,69 @@ class MessageLibraryService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
+      // New or Existing selection shown when user says hi
+      {
+        messageId: 'msg_new_or_existing',
+        name: 'New or Existing Patient?',
+        type: 'interactive_button',
+        status: 'published',
+        contentPayload: {
+          header: 'Welcome!',
+          body: 'Are you a new patient or an existing patient? Please choose:',
+          footer: 'We will help you accordingly',
+          buttons: [
+            {
+              buttonId: 'btn_new_patient',
+              title: 'New Patient',
+              triggerId: 'trigger_new_patient',
+              nextAction: 'send_message',
+              targetMessageId: 'msg_new_patient_form'
+            },
+            {
+              buttonId: 'btn_existing_patient',
+              title: 'Existing Patient',
+              triggerId: 'trigger_existing_patient',
+              nextAction: 'send_message',
+              targetMessageId: 'msg_existing_patient_select'
+            }
+          ]
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        messageId: 'msg_new_patient_form',
+        name: 'New Patient - Form',
+        type: 'standard_text',
+        status: 'published',
+        contentPayload: {
+          body: 'To register as a new patient please fill this form. Form ID: 1366099374850695'
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        messageId: 'msg_existing_patient_select',
+        name: 'Select Existing Patient',
+        type: 'interactive_list',
+        status: 'published',
+        contentPayload: {
+          header: 'Existing Patients',
+          body: 'Select your name from the list:',
+          footer: 'Your details will be loaded',
+          buttonText: 'Choose Name',
+          sections: [
+            {
+              title: 'Patients',
+              rows: [
+                // rows will be populated dynamically from Firestore
+              ]
+            }
+          ]
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
       {
         messageId: 'msg_book_interactive',
         name: 'Book Appointment - Interactive',
@@ -449,8 +512,8 @@ class MessageLibraryService {
         triggerType: 'keyword_match',
         triggerValue: ['hi', 'hello', 'hey', 'start', 'menu'],
         nextAction: 'send_message',
-        targetId: 'msg_welcome_interactive',
-        messageId: 'msg_welcome_interactive',
+        targetId: 'msg_new_or_existing',
+        messageId: 'msg_new_or_existing',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
@@ -757,6 +820,28 @@ class MessageLibraryService {
           entry.contentPayload = entry.contentPayload || {};
           entry.contentPayload.sections = [{ title: 'Doctors', rows }];
         }
+
+        // Register corresponding list-selection triggers for each doctor row so selections are handled
+        try {
+          rows.forEach(r => {
+            const existing = this.triggers.find(t => t.triggerType === 'list_selection' && t.triggerValue === r.rowId);
+            if (!existing) {
+              const newTrig = {
+                triggerId: `trigger_${r.rowId}`,
+                triggerType: 'list_selection',
+                triggerValue: r.rowId,
+                nextAction: r.nextAction || 'send_message',
+                targetId: r.targetMessageId || r.targetMessageId,
+                messageId: r.targetMessageId || r.targetMessageId,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              };
+              this.triggers.push(newTrig);
+            }
+          });
+        } catch (err) {
+          console.error('Failed to register dynamic triggers for doctors:', err);
+        }
       } catch (err) {
         console.error('Failed to load doctors from Firestore:', err.message || err);
       }
@@ -783,6 +868,58 @@ class MessageLibraryService {
         entry.contentPayload.sections = [{ title: 'Lab Tests', rows }];
       } catch (err) {
         console.error('Failed to load labs from Firestore:', err.message || err);
+      }
+    }
+
+    // If this is the existing patient selection, fetch patients and register triggers
+    if (entry.messageId === 'msg_existing_patient_select' || entry.name?.toLowerCase().includes('existing patient')) {
+      try {
+        const patientsSnapshot = await db.collection('patients').get();
+        const rows = [];
+        patientsSnapshot.forEach(doc => {
+          const p = doc.data();
+          // skip if marked inactive
+          if (p.hasOwnProperty('isActive') && p.isActive === false) return;
+          rows.push({
+            rowId: doc.id,
+            title: p.name || 'Unknown',
+            description: p.phoneNumber || '',
+            triggerId: `trigger_patient_${doc.id}`,
+            nextAction: 'send_message',
+            targetMessageId: 'msg_welcome_interactive'
+          });
+        });
+
+        if (entry.contentPayload && entry.contentPayload.sections && entry.contentPayload.sections.length) {
+          entry.contentPayload.sections[0].rows = rows;
+        } else {
+          entry.contentPayload = entry.contentPayload || {};
+          entry.contentPayload.sections = [{ title: 'Patients', rows }];
+        }
+
+        // register triggers for patient selection
+        try {
+          rows.forEach(r => {
+            const existing = this.triggers.find(t => t.triggerType === 'list_selection' && t.triggerValue === r.rowId);
+            if (!existing) {
+              const newTrig = {
+                triggerId: `trigger_patient_${r.rowId}`,
+                triggerType: 'list_selection',
+                triggerValue: r.rowId,
+                nextAction: 'send_message',
+                targetId: r.targetMessageId,
+                messageId: r.targetMessageId,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              };
+              this.triggers.push(newTrig);
+            }
+          });
+        } catch (err) {
+          console.error('Failed to register patient selection triggers:', err);
+        }
+      } catch (err) {
+        console.error('Failed to load patients from Firestore:', err.message || err);
       }
     }
 
