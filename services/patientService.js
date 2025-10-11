@@ -3,6 +3,7 @@ const { db } = require('../config/firebase');
 class PatientService {
   constructor() {
     this.collection = db.collection('patients');
+    this.auditCollection = db.collection('patientAudits');
   }
 
   // Create a new patient
@@ -17,6 +18,18 @@ class PatientService {
 
       const docRef = await this.collection.add(patient);
       console.info('Created patient', { id: docRef.id, phoneNumber: patient.phoneNumber, timestamp: new Date().toISOString() });
+      // Write audit record
+      try {
+        await this.auditCollection.add({
+          action: 'create',
+          patientId: docRef.id,
+          data: patient,
+          timestamp: new Date()
+        });
+      } catch (auditErr) {
+        console.error('Failed to write patient create audit:', auditErr);
+      }
+
       return { id: docRef.id, ...patient };
     } catch (error) {
       console.error('Error creating patient:', error);
@@ -84,7 +97,29 @@ class PatientService {
       };
 
       console.info('Updating patient', { id: patientId, changes: Object.keys(updateData), timestamp: new Date().toISOString() });
+      // Fetch existing for audit
+      let before = null;
+      try {
+        const beforeDoc = await this.collection.doc(patientId).get();
+        if (beforeDoc.exists) before = beforeDoc.data();
+      } catch (e) {
+        console.error('Failed to read patient before update for audit:', e);
+      }
+
       await this.collection.doc(patientId).update(updatePayload);
+
+      try {
+        await this.auditCollection.add({
+          action: 'update',
+          patientId,
+          before,
+          after: updatePayload,
+          timestamp: new Date()
+        });
+      } catch (auditErr) {
+        console.error('Failed to write patient update audit:', auditErr);
+      }
+
       return await this.getPatientById(patientId);
     } catch (error) {
       console.error('Error updating patient:', error);
@@ -145,11 +180,32 @@ class PatientService {
   async deletePatient(patientId) {
     try {
       console.warn('Soft-deleting patient', { id: patientId, timestamp: new Date().toISOString() });
+      // For audit, capture current record
+      let before = null;
+      try {
+        const beforeDoc = await this.collection.doc(patientId).get();
+        if (beforeDoc.exists) before = beforeDoc.data();
+      } catch (e) {
+        console.error('Failed to read patient before delete for audit:', e);
+      }
+
       await this.collection.doc(patientId).update({
         isActive: false,
         deletedAt: new Date(),
         updatedAt: new Date()
       });
+
+      try {
+        await this.auditCollection.add({
+          action: 'delete',
+          patientId,
+          before,
+          timestamp: new Date()
+        });
+      } catch (auditErr) {
+        console.error('Failed to write patient delete audit:', auditErr);
+      }
+
       return true;
     } catch (error) {
       console.error('Error deleting patient:', error);
