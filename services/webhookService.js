@@ -152,8 +152,100 @@ async function handleInteractiveResponse(message) {
     } catch (err) {
       // ignore
     }
+    // Proactively create pending booking entries from raw interactive replies so Confirm & Pay can finalize
+    try {
+      const rawButtonId2 = message.interactive?.button_reply?.id || null;
+      const rawListId2 = message.interactive?.list_reply?.id || null;
+      if (rawListId2) {
+        // Check if this list id maps to a doctor
+        const doc = await doctorService.getDoctorById(rawListId2).catch(() => null);
+        if (doc) {
+          console.log('ℹ️ Proactively creating pending booking for doctor selection (raw list):', rawListId2);
+          await bookingService.createPendingBooking(message.from, { doctorId: rawListId2, meta: { doctorName: doc.name } });
+        }
+      }
+
+      if (rawButtonId2 && String(rawButtonId2).startsWith('btn_slot_')) {
+        // Create/merge pending with slot info
+        let slotTitle = rawButtonId2;
+        const slotsMsg = messageLibraryService.getMessageById('msg_sharma_slots_interactive');
+        if (slotsMsg && slotsMsg.contentPayload && Array.isArray(slotsMsg.contentPayload.buttons)) {
+          const btn = slotsMsg.contentPayload.buttons.find(b => b.buttonId === rawButtonId2);
+          if (btn) slotTitle = btn.title;
+        }
+        console.log('ℹ️ Proactively creating pending booking for slot selection (raw button):', slotTitle);
+        await bookingService.createPendingBooking(message.from, { bookingTime: slotTitle, meta: { slotTitle } });
+      }
+    } catch (err) {
+      console.error('Error proactively creating pending booking from raw interactive reply:', err);
+    }
     
     let result = messageLibraryService.processInteractiveResponse(message.interactive);
+
+    // Additional fallback: if no result but raw ids exist, handle them directly
+    const rawButtonId = message.interactive?.button_reply?.id || null;
+    const rawListId = message.interactive?.list_reply?.id || null;
+
+    if ((!result || !result.trigger) && rawListId) {
+      // Treat rawListId as doctor id (common when dynamic lists are built)
+      try {
+        const doc = await doctorService.getDoctorById(rawListId).catch(() => null);
+        if (doc) {
+          console.log('ℹ️ Fallback: creating pending booking from raw list id (doctor):', rawListId);
+          await bookingService.createPendingBooking(message.from, { doctorId: rawListId, meta: { doctorName: doc.name } });
+          // send slots message (best-effort)
+          const slotsMsg = messageLibraryService.getMessageById('msg_sharma_slots_interactive');
+          if (slotsMsg) {
+            try { await messageLibraryService.sendLibraryMessage(slotsMsg, message.from); } catch(e){ console.error('Failed to send slots message in fallback', e); }
+          }
+          // we handled it
+          return;
+        }
+      } catch (err) {
+        console.error('Error in rawListId fallback:', err);
+      }
+    }
+
+    if ((!result || !result.trigger) && rawButtonId) {
+      // Slot selection or confirm-pay/payment-done buttons
+      try {
+        if (String(rawButtonId).startsWith('btn_slot_')) {
+          // Save selected slot
+          let slotTitle = rawButtonId;
+          const slotsMsg = messageLibraryService.getMessageById('msg_sharma_slots_interactive');
+          if (slotsMsg && slotsMsg.contentPayload && Array.isArray(slotsMsg.contentPayload.buttons)) {
+            const btn = slotsMsg.contentPayload.buttons.find(b => b.buttonId === rawButtonId);
+            if (btn) slotTitle = btn.title;
+          }
+          await bookingService.createPendingBooking(message.from, { bookingTime: slotTitle, meta: { slotTitle } });
+          // forward confirm message if exists
+          const confirmMsg = messageLibraryService.getMessageById('msg_confirm_appointment');
+          if (confirmMsg) { try { await messageLibraryService.sendLibraryMessage(confirmMsg, message.from); } catch(e){console.error('Failed to send confirm message in fallback', e)} }
+          console.log('ℹ️ Fallback: pending booking created for slot:', slotTitle);
+          return;
+        }
+
+        if (rawButtonId === 'btn_confirm_pay') {
+          // Finalize booking immediately (as user requested)
+          console.log('ℹ️ Fallback: finalize booking on raw confirm_pay');
+          const pending = await bookingService.getPendingBookingForUser(message.from);
+          if (pending) {
+            let patient = await patientService.getPatientByPhone(message.from);
+            if (!patient) patient = await patientService.createPatient({ name: pending.meta?.patientName || 'Unknown', phoneNumber: message.from });
+            const bookingTime = pending.bookingTime || new Date().toISOString();
+            const booking = await bookingService.createBooking({ patientId: patient.id, doctorId: pending.doctorId, bookingTime, meta: pending.meta || {} });
+            await bookingService.deletePendingBooking(message.from);
+            try { await messageLibraryService.sendLibraryMessage({ type:'standard_text', contentPayload:{ body:`✅ Your appointment has been reserved. Booking ID: ${booking.id}. Please complete payment to confirm.` } }, message.from);}catch(e){console.error('Failed to send confirmation in fallback', e)}
+            await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: `Appointment reserved: ${booking.id}`, patientId: patient.id, doctorId: booking.doctorId, bookingId: booking.id, isResponse: false });
+          } else {
+            console.log('Fallback confirm_pay: no pending booking to finalize');
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('Error in rawButtonId fallback:', err);
+      }
+    }
 
     // If the library didn't find a trigger (could be id mismatch), attempt to resolve from raw payload
     if ((!result || !result.trigger) && message.interactive) {
@@ -252,47 +344,51 @@ async function handleInteractiveResponse(message) {
         }
       }
 
-        // --- Interactive booking helpers ---
-        // If the selection leads to doctor slots (doctor chosen), persist a pending booking with doctorId
+        // --- Interactive booking helpers (robust) ---
         try {
-          // dynamic doctor selection leads to a nextMessage of 'msg_sharma_slots_interactive' or trigger.targetId set to that
-          const nextMsgId = result.nextMessage && result.nextMessage.messageId ? result.nextMessage.messageId : null;
-          if (trigger.targetId === 'msg_sharma_slots_interactive' || nextMsgId === 'msg_sharma_slots_interactive') {
-            const selectedDoctorId = trigger.triggerValue; // for dynamic triggers this is the doctor doc id
-            try {
-              const doctor = await doctorService.getDoctorById(selectedDoctorId).catch(() => null);
-              await bookingService.createPendingBooking(message.from, { doctorId: selectedDoctorId, meta: { doctorName: doctor?.name } });
-              // forward the slots message to user
-              if (result.nextMessage) await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
-              return;
-            } catch (err) {
-              console.error('Error saving pending booking for doctor selection:', err);
+          const rawButtonId = message.interactive?.button_reply?.id || null;
+          const rawListId = message.interactive?.list_reply?.id || null;
+
+          // 1) If this is a list selection and the value corresponds to a doctor id, save pending doctor
+          if ((trigger.triggerType === 'list_selection' || rawListId) ) {
+            const doctorId = trigger.triggerValue || rawListId;
+            if (doctorId) {
+              try {
+                const doctor = await doctorService.getDoctorById(doctorId).catch(() => null);
+                if (doctor) {
+                  await bookingService.createPendingBooking(message.from, { doctorId: doctor.id, meta: { doctorName: doctor.name } });
+                  // forward next message if present (slots)
+                  if (result.nextMessage) await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+                  console.log('✅ Pending booking created for doctor selection:', doctor.id);
+                  return;
+                }
+              } catch (err) {
+                console.error('Error creating pending booking from list selection:', err);
+              }
             }
           }
 
-          // If user selected a slot (which leads to confirm appointment message), save chosen slot in pending booking
-          if (trigger.targetId === 'msg_confirm_appointment' || (result.nextMessage && result.nextMessage.messageId === 'msg_confirm_appointment')) {
+          // 2) If this is a slot button click (button id like btn_slot_...), save the slot
+          const clickedButtonId = trigger.triggerValue || rawButtonId;
+          if (clickedButtonId && String(clickedButtonId).startsWith('btn_slot_')) {
             try {
-              // extract clicked button id for slot (e.g. 'btn_slot_930')
-              const clickedButtonId = message.interactive?.button_reply?.id || null;
+              // find human-friendly title when possible
               let slotTitle = clickedButtonId;
-              // try to read human-friendly title from slots message definition
               const slotsMsg = messageLibraryService.getMessageById('msg_sharma_slots_interactive');
               if (slotsMsg && slotsMsg.contentPayload && Array.isArray(slotsMsg.contentPayload.buttons)) {
                 const btn = slotsMsg.contentPayload.buttons.find(b => b.buttonId === clickedButtonId);
                 if (btn) slotTitle = btn.title;
               }
 
-              // store bookingTime as slotTitle; will attempt to parse when finalizing
               await bookingService.createPendingBooking(message.from, { bookingTime: slotTitle, meta: { slotTitle } });
-
-              // forward confirm message
               if (result.nextMessage) await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+              console.log('✅ Pending booking created for slot selection:', slotTitle);
               return;
             } catch (err) {
-              console.error('Error saving pending booking slot selection:', err);
+              console.error('Error creating pending booking from slot selection:', err);
             }
           }
+
         } catch (err) {
           console.error('Unexpected error in interactive booking helper:', err);
         }

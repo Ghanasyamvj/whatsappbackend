@@ -7,10 +7,34 @@ class BookingService {
 
   async createBooking({ patientId, doctorId, bookingTime, meta = {} }) {
     try {
+      // Normalize bookingTime: accept Date, timestamp, or human string. If parsing fails, fall back to now.
+      let bookingDate = null;
+      if (!bookingTime) {
+        bookingDate = new Date();
+      } else if (bookingTime instanceof Date) {
+        bookingDate = bookingTime;
+      } else {
+        try {
+          bookingDate = new Date(bookingTime);
+          if (isNaN(bookingDate.getTime())) {
+            // Try removing emoji and common prefixes like weekday names
+            const cleaned = String(bookingTime).replace(/[\u{1F300}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+            bookingDate = new Date(cleaned);
+          }
+          if (isNaN(bookingDate.getTime())) {
+            console.warn('⚠️  Unable to parse bookingTime, falling back to now for booking. bookingTime:', bookingTime);
+            bookingDate = new Date();
+          }
+        } catch (e) {
+          console.warn('⚠️  Error parsing bookingTime, falling back to now:', e.message || e);
+          bookingDate = new Date();
+        }
+      }
+
       const booking = {
         patientId,
         doctorId,
-        bookingTime: bookingTime ? new Date(bookingTime) : new Date(),
+        bookingTime: bookingDate,
         status: 'scheduled',
         meta,
         createdAt: new Date(),
