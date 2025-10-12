@@ -135,6 +135,23 @@ async function handleIncomingMessage(message) {
 async function handleInteractiveResponse(message) {
   try {
     console.log(`🔘 Processing interactive response from ${message.from}:`, message.interactive);
+
+    // Persist raw interactive webhook for debugging (so we can inspect button/list ids)
+    try {
+      await flowService.createWebhookMessage({ rawMessage: message });
+      console.log('📥 Raw interactive webhook persisted for debugging');
+    } catch (err) {
+      console.error('⚠️ Failed to persist raw interactive webhook:', err.message || err);
+    }
+
+    // Log raw reply ids for quick diagnostics
+    try {
+      const rawButtonId = message.interactive?.button_reply?.id || null;
+      const rawListId = message.interactive?.list_reply?.id || null;
+      console.log('🔎 Raw interactive ids:', { rawButtonId, rawListId });
+    } catch (err) {
+      // ignore
+    }
     
     let result = messageLibraryService.processInteractiveResponse(message.interactive);
 
@@ -163,6 +180,7 @@ async function handleInteractiveResponse(message) {
 
     if (result && result.trigger) {
       const trigger = result.trigger;
+      console.log('🔔 Interactive trigger details:', { triggerId: trigger.triggerId, triggerType: trigger.triggerType, triggerValue: trigger.triggerValue, nextAction: trigger.nextAction, targetId: trigger.targetId });
       // If trigger asks to send a library message
         if (trigger.nextAction === 'send_message' && result.nextMessage) {
         console.log(`📤 Sending next message: "${result.nextMessage.name}" to ${message.from}`);
@@ -202,6 +220,36 @@ async function handleInteractiveResponse(message) {
             console.error('Error finalizing booking on confirm_pay:', err);
           }
         return;
+      }
+
+      // If we don't have a resolved trigger but the nextMessage is the payment link, try finalizing
+      if ((!result || !result.trigger) && result && result.nextMessage) {
+        try {
+          const nm = result.nextMessage;
+          const nmId = nm.messageId || nm.name;
+          console.log('ℹ️ No trigger resolved, but nextMessage exists:', nmId);
+          if (nmId === 'msg_payment_link' || (typeof nm.name === 'string' && nm.name.toLowerCase().includes('payment'))) {
+            // finalize pending booking as Confirm & Pay
+            console.log('ℹ️ Finalizing booking because nextMessage is payment link');
+            const pending = await bookingService.getPendingBookingForUser(message.from);
+            if (pending) {
+              let patient = await patientService.getPatientByPhone(message.from);
+              if (!patient) {
+                patient = await patientService.createPatient({ name: pending.meta?.patientName || 'Unknown', phoneNumber: message.from });
+              }
+              const bookingTime = pending.bookingTime || new Date().toISOString();
+              const booking = await bookingService.createBooking({ patientId: patient.id, doctorId: pending.doctorId, bookingTime, meta: pending.meta || {} });
+              await bookingService.deletePendingBooking(message.from);
+              console.log('✅ Booking finalized on payment-link path:', booking.id);
+              try { await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `✅ Your appointment has been reserved. Booking ID: ${booking.id}. Please complete payment to confirm.` } }, message.from); } catch(e){console.error('Failed to send confirmation after payment-link finalize', e)}
+              await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: `Appointment reserved: ${booking.id}`, patientId: patient.id, doctorId: booking.doctorId, bookingId: booking.id, isResponse: false });
+            } else {
+              console.log('No pending booking to finalize on payment-link path');
+            }
+          }
+        } catch (err) {
+          console.error('Error in fallback payment-link finalization:', err);
+        }
       }
 
         // --- Interactive booking helpers ---
