@@ -56,9 +56,21 @@ async function sendBookingSelectionList(phone) {
 
     // Build list rows and register selection triggers
     const rows = [];
+    const truncate = (s, n) => {
+      if (!s) return '';
+      const str = String(s);
+      if (str.length <= n) return str;
+      return str.slice(0, Math.max(0, n - 1)) + '…';
+    };
+
     for (const c of candidates) {
       const doctor = c.doctorId ? await doctorService.getDoctorById(c.doctorId) : null;
-      rows.push({ rowId: c.id, title: `${c.bookingTimeObj.toLocaleString()} — ${doctor?.name || 'Doctor'}`, description: `Booking ${c.id}`, triggerId: `trigger_booking_${c.id}` });
+      // Build a compact title (time + doctor) and truncate to WhatsApp list title limit (24 chars)
+      const timeStr = c.bookingTimeObj ? c.bookingTimeObj.toLocaleString() : '';
+      const rawTitle = `${timeStr} — ${doctor?.name || 'Doctor'}`;
+      const safeTitle = truncate(rawTitle, 24);
+      const safeDesc = `Booking ${c.id}`;
+      rows.push({ rowId: c.id, title: safeTitle, description: safeDesc, triggerId: `trigger_booking_${c.id}` });
       // register a list-selection trigger for this booking if not exists
       const existing = messageLibraryService.triggers.find(t => t.triggerType === 'list_selection' && t.triggerValue === c.id);
       if (!existing) {
