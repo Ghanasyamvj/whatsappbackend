@@ -141,7 +141,7 @@ async function handleInteractiveResponse(message) {
     if (result && result.trigger) {
       const trigger = result.trigger;
       // If trigger asks to send a library message
-      if (trigger.nextAction === 'send_message' && result.nextMessage) {
+        if (trigger.nextAction === 'send_message' && result.nextMessage) {
         console.log(`📤 Sending next message: "${result.nextMessage.name}" to ${message.from}`);
         try {
           await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
@@ -152,6 +152,97 @@ async function handleInteractiveResponse(message) {
         return;
       }
 
+      // If trigger asks to mark arrived (button or keyword)
+      if (trigger.nextAction === 'mark_arrived') {
+        console.log(`🔔 Mark arrived requested for ${message.from}`);
+        try {
+          const phone = message.from;
+          const patient = await patientService.getPatientByPhone(phone);
+          if (!patient) {
+            // Prompt to select existing patient or register
+            const msg = messageLibraryService.getMessageById('msg_existing_patient_select');
+            if (msg) await messageLibraryService.sendLibraryMessage(msg, phone);
+            return;
+          }
+
+          // Find scheduled bookings for this patient
+          const snaps = await require('../config/firebase').db.collection('bookings').where('patientId', '==', patient.id).where('status', '==', 'scheduled').get();
+          const candidates = [];
+          const now = new Date();
+          const windowStart = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+          const windowEnd = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+
+          snaps.forEach(d => {
+            const b = d.data();
+            const bt = (b.bookingTime && b.bookingTime.toDate) ? b.bookingTime.toDate() : new Date(b.bookingTime);
+            if (bt >= windowStart && bt <= windowEnd) {
+              candidates.push({ id: d.id, ...b, bookingTimeObj: bt });
+            }
+          });
+
+          // If none in window, include all scheduled and pick soonest
+          if (candidates.length === 0) {
+            snaps.forEach(d => {
+              const b = d.data();
+              const bt = (b.bookingTime && b.bookingTime.toDate) ? b.bookingTime.toDate() : new Date(b.bookingTime);
+              candidates.push({ id: d.id, ...b, bookingTimeObj: bt });
+            });
+          }
+
+          if (candidates.length === 0) {
+            // No bookings found
+            await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'We could not find any upcoming bookings for you. Please check at reception.' } }, phone);
+            return;
+          }
+
+          if (candidates.length === 1) {
+            // Single booking: mark arrived
+            const chosen = candidates[0];
+            await bookingService.markArrived(chosen.id, { arrivalLocation: null, checkedInBy: 'whatsapp' });
+            await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `Thanks ${patient.name || ''}, we have recorded your arrival for ${chosen.bookingTimeObj.toLocaleString()}. Please proceed to reception.` } }, phone);
+
+            // notify doctor
+            if (chosen.doctorId) {
+              const doctor = await doctorService.getDoctorById(chosen.doctorId);
+              await flowService.createMessageWithFlow({ userPhone: doctor?.phoneNumber || null, messageType: 'text', content: `Patient ${patient.name || ''} has checked in for booking ${chosen.id}.`, isResponse: false, doctorId: doctor?.id });
+            }
+            return;
+          }
+
+          // Multiple candidates: build interactive list so user selects which booking to check in for
+          const rows = [];
+          for (const c of candidates) {
+            const doctor = c.doctorId ? await doctorService.getDoctorById(c.doctorId) : null;
+            rows.push({ rowId: c.id, title: `${c.bookingTimeObj.toLocaleString()} — ${doctor?.name || 'Doctor'}`, description: `Booking ${c.id}`, triggerId: `trigger_booking_${c.id}` });
+            // register a list-selection trigger for this booking
+            const existing = messageLibraryService.triggers.find(t => t.triggerType === 'list_selection' && t.triggerValue === c.id);
+            if (!existing) {
+              messageLibraryService.addTrigger({ triggerId: `trigger_booking_${c.id}`, triggerType: 'list_selection', triggerValue: c.id, nextAction: 'mark_arrived_selected', targetId: c.id, messageId: null });
+            }
+          }
+
+          const listMessage = {
+            messageId: `msg_booking_select_${Date.now()}`,
+            name: 'Select Booking to Check-in',
+            type: 'interactive_list',
+            status: 'published',
+            contentPayload: {
+              header: 'Which booking are you checking in for?',
+              body: 'Select the booking you have arrived for:',
+              footer: 'Choose from the list',
+              buttonText: 'Select Booking',
+              sections: [{ title: 'Upcoming bookings', rows }]
+            }
+          };
+
+          await messageLibraryService.sendLibraryMessage(listMessage, phone);
+          return;
+        } catch (err) {
+          console.error('❌ Failed to handle mark_arrived:', err);
+          await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'Sorry, we could not process your check-in. Please try at reception.' } }, message.from);
+        }
+      }
+
       // If trigger asks to start a WhatsApp Flow
       if (trigger.nextAction === 'start_flow' && trigger.targetId) {
         try {
@@ -160,6 +251,33 @@ async function handleInteractiveResponse(message) {
           console.log(`✅ Started flow ${trigger.targetId} for ${message.from}`);
         } catch (err) {
           console.error('❌ Failed to start flow from interactive trigger:', err.message || err);
+        }
+        return;
+      }
+
+      // If trigger is a booking selection to mark arrived
+      if (trigger.nextAction === 'mark_arrived_selected' && trigger.triggerType === 'list_selection') {
+        try {
+          const bookingId = trigger.triggerValue || result.trigger.triggerValue || result.trigger.targetId || result.trigger.targetId;
+          if (!bookingId) {
+            console.error('No booking id found on selection trigger');
+            return;
+          }
+
+          // find patient by phone
+          const patient = await patientService.getPatientByPhone(message.from);
+          await bookingService.markArrived(bookingId, { arrivalLocation: null, checkedInBy: 'whatsapp' });
+
+          await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `Thanks ${patient?.name || ''}, we've marked you as arrived for booking ${bookingId}. Please proceed to reception.` } }, message.from);
+
+          // notify doctor
+          const bookingDoc = (await require('../config/firebase').db.collection('bookings').doc(bookingId).get()).data();
+          if (bookingDoc && bookingDoc.doctorId) {
+            const doctor = await doctorService.getDoctorById(bookingDoc.doctorId);
+            await flowService.createMessageWithFlow({ userPhone: doctor?.phoneNumber || null, messageType: 'text', content: `Patient ${patient?.name || ''} checked in for booking ${bookingId}.`, isResponse: false, doctorId: doctor?.id });
+          }
+        } catch (err) {
+          console.error('Failed to process mark_arrived_selected:', err);
         }
         return;
       }

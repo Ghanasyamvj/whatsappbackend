@@ -34,6 +34,11 @@ async function main() {
       console.log('Updating doctor', doc.id);
       await db.collection('doctors').doc(doc.id).update({ doctorId: doc.id });
     }
+    // Ensure isAvailable exists (default true)
+    if (!data.hasOwnProperty('isAvailable')) {
+      console.log('Setting isAvailable=true for doctor', doc.id);
+      await db.collection('doctors').doc(doc.id).update({ isAvailable: true });
+    }
   }
 
   console.log('Backfill completed');

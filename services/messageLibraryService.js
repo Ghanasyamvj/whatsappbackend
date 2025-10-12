@@ -40,6 +40,14 @@ class MessageLibraryService {
               nextAction: 'send_message',
               targetMessageId: 'msg_emergency'
             }
+            ,
+            {
+              buttonId: 'btn_checkin',
+              title: "📍 I've arrived",
+              triggerId: 'trigger_checkin',
+              nextAction: 'mark_arrived',
+              targetMessageId: null
+            }
           ]
         },
         createdAt: new Date().toISOString(),
@@ -540,6 +548,29 @@ class MessageLibraryService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
+      // Check-in button trigger
+      {
+        triggerId: 'trigger_checkin',
+        triggerType: 'button_click',
+        triggerValue: 'btn_checkin',
+        nextAction: 'mark_arrived',
+        targetId: null,
+        messageId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      // Keyword fallback: user can type 'arrived' or similar
+      {
+        triggerId: 'trigger_arrived',
+        triggerType: 'keyword_match',
+        triggerValue: ['arrived', 'i arrived', 'here', 'i am here'],
+        nextAction: 'mark_arrived',
+        targetId: null,
+        messageId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      ,
       {
         triggerId: 'trigger_help',
         triggerType: 'keyword_match',

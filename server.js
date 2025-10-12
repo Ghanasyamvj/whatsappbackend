@@ -11,6 +11,7 @@ const messageLibraryRoutes = require('./routes/messageLibrary');
 const patientRoutes = require('./routes/patients');
 const doctorRoutes = require('./routes/doctors');
 const flowRoutes = require('./routes/flows');
+const bookingRoutes = require('./routes/bookings');
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/message-library', messageLibraryRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/doctors', doctorRoutes);
+app.use('/api/bookings', bookingRoutes);
 app.use('/api/flows', flowRoutes);
 
 // Root endpoint

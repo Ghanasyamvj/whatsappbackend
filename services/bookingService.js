@@ -64,6 +64,33 @@ class BookingService {
       throw error;
     }
   }
+
+  // Mark a booking as arrived (patient has checked in at hospital)
+  async markArrived(bookingId, { arrivalLocation = null, checkedInBy = null } = {}) {
+    try {
+      const now = new Date();
+      const update = {
+        status: 'arrived',
+        arrivalTime: now,
+        arrivalLocation: arrivalLocation || null,
+        checkedInBy: checkedInBy || null,
+        updatedAt: now
+      };
+
+      await this.collection.doc(bookingId).update(update);
+      const doc = await this.collection.doc(bookingId).get();
+
+      // also write bookingId field if missing
+      if (!doc.data().bookingId) {
+        try { await this.collection.doc(bookingId).update({ bookingId }); } catch (e){}
+      }
+
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error('Error marking booking arrived:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new BookingService();
