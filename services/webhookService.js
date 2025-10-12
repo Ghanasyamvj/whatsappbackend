@@ -149,6 +149,35 @@ async function handleInteractiveResponse(message) {
         } catch (error) {
           console.error(`❌ Failed to send interactive response message:`, error.message);
         }
+          // If this was the Confirm & Pay button, finalize the pending booking now
+          try {
+            if (trigger.triggerId === 'trigger_confirm_pay' || trigger.triggerValue === 'btn_confirm_pay') {
+              const pending = await bookingService.getPendingBookingForUser(message.from);
+              if (pending) {
+                // Ensure patient exists
+                let patient = await patientService.getPatientByPhone(message.from);
+                if (!patient) {
+                  patient = await patientService.createPatient({ name: pending.meta?.patientName || 'Unknown', phoneNumber: message.from });
+                }
+
+                const bookingTime = pending.bookingTime || new Date().toISOString();
+                const booking = await bookingService.createBooking({ patientId: patient.id, doctorId: pending.doctorId, bookingTime, meta: pending.meta || {} });
+                await bookingService.deletePendingBooking(message.from);
+
+                // send a quick confirmation message (in addition to payment link)
+                try {
+                  await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `✅ Your appointment has been reserved. Booking ID: ${booking.id}. Please complete payment to confirm.` } }, message.from);
+                } catch (err) {
+                  console.error('Failed to send booking confirmation message after confirm_pay:', err);
+                }
+
+                // persist appointment message
+                await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: `Appointment reserved: ${booking.id}`, patientId: patient.id, doctorId: booking.doctorId, bookingId: booking.id, isResponse: false });
+              }
+            }
+          } catch (err) {
+            console.error('Error finalizing booking on confirm_pay:', err);
+          }
         return;
       }
 
