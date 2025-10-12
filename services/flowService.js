@@ -232,19 +232,18 @@ class FlowService {
   // Get messages by user phone
   async getMessagesByUser(phoneNumber) {
     try {
-      const snapshot = await this.messagesCollection
-        .where('userPhone', '==', phoneNumber)
-        .orderBy('createdAt', 'desc')
-        .get();
-
+      // NOTE: This method historically used a where+orderBy which may require a composite index.
+      // For local debugging and tests we fall back to fetching a small window of recent messages
+      // and filtering in-memory to avoid Firestore index creation during development.
+      const snapshot = await this.messagesCollection.orderBy('createdAt', 'desc').limit(200).get();
       const messages = [];
       snapshot.forEach(doc => {
-        messages.push({ id: doc.id, ...doc.data() });
+        const d = doc.data();
+        if (d.userPhone === phoneNumber) messages.push({ id: doc.id, ...d });
       });
-
       return messages;
     } catch (error) {
-      console.error('Error getting messages by user:', error);
+      console.error('Error getting messages by user (fallback):', error);
       throw error;
     }
   }

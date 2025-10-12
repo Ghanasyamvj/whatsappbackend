@@ -6,6 +6,92 @@ const patientService = require('./patientService');
 const doctorService = require('./doctorService');
 const bookingService = require('./bookingService');
 
+// Helper: build and send (or persist) an interactive list of current bookings for a phone
+async function sendBookingSelectionList(phone) {
+  try {
+    const patient = await patientService.getPatientByPhone(phone);
+    if (!patient) {
+      // Prompt to select existing patient or register
+      const msg = messageLibraryService.getMessageById('msg_existing_patient_select');
+      if (msg) {
+        try { await messageLibraryService.sendLibraryMessage(msg, phone); } catch(e){ console.error('Failed to send existing-patient selection message', e); await flowService.createMessageWithFlow({ userPhone: phone, messageType: 'interactive', content: msg.contentPayload, isResponse: false }); }
+      }
+      return;
+    }
+
+    // Find scheduled bookings for this patient
+    const snaps = await require('../config/firebase').db.collection('bookings').where('patientId', '==', patient.id).where('status', '==', 'scheduled').get();
+    const candidates = [];
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+    const windowEnd = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+
+    snaps.forEach(d => {
+      const b = d.data();
+      const bt = (b.bookingTime && b.bookingTime.toDate) ? b.bookingTime.toDate() : new Date(b.bookingTime);
+      if (bt >= windowStart && bt <= windowEnd) {
+        candidates.push({ id: d.id, ...b, bookingTimeObj: bt });
+      }
+    });
+
+    // If none in window, include all scheduled and pick soonest
+    if (candidates.length === 0) {
+      snaps.forEach(d => {
+        const b = d.data();
+        const bt = (b.bookingTime && b.bookingTime.toDate) ? b.bookingTime.toDate() : new Date(b.bookingTime);
+        candidates.push({ id: d.id, ...b, bookingTimeObj: bt });
+      });
+    }
+
+    if (candidates.length === 0) {
+      // No bookings found
+      try {
+        await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'We could not find any upcoming bookings for you. Please check at reception.' } }, phone);
+      } catch (sendErr) {
+        console.error('Failed to send WhatsApp message, saving message record instead:', sendErr?.message || sendErr);
+        await flowService.createMessageWithFlow({ userPhone: phone, messageType: 'text', content: 'We could not find any upcoming bookings for you. Please check at reception.', isResponse: false });
+      }
+      return;
+    }
+
+    // Build list rows and register selection triggers
+    const rows = [];
+    for (const c of candidates) {
+      const doctor = c.doctorId ? await doctorService.getDoctorById(c.doctorId) : null;
+      rows.push({ rowId: c.id, title: `${c.bookingTimeObj.toLocaleString()} — ${doctor?.name || 'Doctor'}`, description: `Booking ${c.id}`, triggerId: `trigger_booking_${c.id}` });
+      // register a list-selection trigger for this booking if not exists
+      const existing = messageLibraryService.triggers.find(t => t.triggerType === 'list_selection' && t.triggerValue === c.id);
+      if (!existing) {
+        messageLibraryService.addTrigger({ triggerId: `trigger_booking_${c.id}`, triggerType: 'list_selection', triggerValue: c.id, nextAction: 'mark_arrived_selected', targetId: c.id, messageId: null });
+      }
+    }
+
+    const listMessage = {
+      messageId: `msg_booking_select_${Date.now()}`,
+      name: 'Select Booking to Check-in',
+      type: 'interactive_list',
+      status: 'published',
+      contentPayload: {
+        header: 'Which booking are you checking in for?',
+        body: 'Select the booking you have arrived for:',
+        footer: 'Choose from the list',
+        buttonText: 'Select Booking',
+        sections: [{ title: 'Upcoming bookings', rows }]
+      }
+    };
+
+    try {
+      await messageLibraryService.sendLibraryMessage(listMessage, phone);
+    } catch (sendErr) {
+      console.error('Failed to send interactive list via WhatsApp, saving message record instead:', sendErr?.message || sendErr);
+      await flowService.createMessageWithFlow({ userPhone: phone, messageType: 'interactive', content: listMessage.contentPayload, isResponse: false });
+    }
+  } catch (err) {
+    console.error('❌ Failed to handle mark_arrived:', err);
+    try { await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'Sorry, we could not process your check-in. Please try at reception.' } }, phone); } catch(e){ await flowService.createMessageWithFlow({ userPhone: phone, messageType: 'text', content: 'Sorry, we could not process your check-in. Please try at reception.', isResponse: false }); }
+  }
+}
+
 /**
  * Process incoming webhook payload from WhatsApp Business API
  */
@@ -70,7 +156,7 @@ async function handleIncomingMessage(message) {
     if (matchingTriggers.length > 0) {
       console.log(`🎯 Found ${matchingTriggers.length} matching trigger(s)`);
       
-      for (const trigger of matchingTriggers) {
+        for (const trigger of matchingTriggers) {
           if (trigger.nextAction === 'send_message') {
           // Get the message from library
           const messageEntry = messageLibraryService.getMessageById(trigger.targetId);
@@ -87,7 +173,7 @@ async function handleIncomingMessage(message) {
           } else {
             console.log(`⚠️  Message ${trigger.targetId} not found or not published`);
           }
-        } else if (trigger.nextAction === 'start_flow') {
+  } else if (trigger.nextAction === 'start_flow') {
           // Start a tracked flow: create a tracking record, then send flow with token
           try {
             console.log(`🔄 Starting tracked flow: ${trigger.targetId}`);
@@ -103,6 +189,13 @@ async function handleIncomingMessage(message) {
             await sendFlowMessage(message.from, trigger.targetId, 'Please complete this form:', flowToken);
           } catch (err) {
             console.error('❌ Failed to start tracked flow:', err.message || err);
+          }
+        } else if (trigger.nextAction === 'mark_arrived') {
+          try {
+            console.log('🔔 Trigger requests mark_arrived for', message.from);
+            await sendBookingSelectionList(message.from);
+          } catch (err) {
+            console.error('Error handling mark_arrived trigger:', err);
           }
         }
       }
@@ -200,6 +293,36 @@ async function handleInteractiveResponse(message) {
           }
           // we handled it
           return;
+        }
+        // If not a doctor id, maybe it's a booking id (user selected from bookings list)
+        try {
+          const bookingDocSnap = await require('../config/firebase').db.collection('bookings').doc(rawListId).get();
+          if (bookingDocSnap.exists) {
+            console.log('ℹ️ Fallback: raw list id maps to booking id, marking arrived:', rawListId);
+            const bookingData = bookingDocSnap.data();
+            // mark arrived
+            await bookingService.markArrived(rawListId, { arrivalLocation: null, checkedInBy: 'whatsapp' });
+
+            // notify user
+            try {
+              await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `Thanks, we've marked you as arrived for booking ${rawListId}. Please proceed to reception.` } }, message.from);
+            } catch (e) {
+              console.error('Failed to send arrival confirmation, persisting instead:', e?.message || e);
+              await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: `Thanks, we've marked you as arrived for booking ${rawListId}. Please proceed to reception.`, isResponse: false });
+            }
+
+            // notify doctor if present
+            if (bookingData && bookingData.doctorId) {
+              const doctor = await doctorService.getDoctorById(bookingData.doctorId).catch(() => null);
+              if (doctor) {
+                await flowService.createMessageWithFlow({ userPhone: doctor.phoneNumber || null, messageType: 'text', content: `Patient ${bookingData.patientId || ''} has checked in for booking ${rawListId}.`, isResponse: false, doctorId: doctor.id });
+              }
+            }
+
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking booking doc fallback for rawListId:', err);
         }
       } catch (err) {
         console.error('Error in rawListId fallback:', err);
