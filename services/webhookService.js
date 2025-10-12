@@ -152,6 +152,52 @@ async function handleInteractiveResponse(message) {
         return;
       }
 
+        // --- Interactive booking helpers ---
+        // If the selection leads to doctor slots (doctor chosen), persist a pending booking with doctorId
+        try {
+          // dynamic doctor selection leads to a nextMessage of 'msg_sharma_slots_interactive' or trigger.targetId set to that
+          const nextMsgId = result.nextMessage && result.nextMessage.messageId ? result.nextMessage.messageId : null;
+          if (trigger.targetId === 'msg_sharma_slots_interactive' || nextMsgId === 'msg_sharma_slots_interactive') {
+            const selectedDoctorId = trigger.triggerValue; // for dynamic triggers this is the doctor doc id
+            try {
+              const doctor = await doctorService.getDoctorById(selectedDoctorId).catch(() => null);
+              await bookingService.createPendingBooking(message.from, { doctorId: selectedDoctorId, meta: { doctorName: doctor?.name } });
+              // forward the slots message to user
+              if (result.nextMessage) await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+              return;
+            } catch (err) {
+              console.error('Error saving pending booking for doctor selection:', err);
+            }
+          }
+
+          // If user selected a slot (which leads to confirm appointment message), save chosen slot in pending booking
+          if (trigger.targetId === 'msg_confirm_appointment' || (result.nextMessage && result.nextMessage.messageId === 'msg_confirm_appointment')) {
+            try {
+              // extract clicked button id for slot (e.g. 'btn_slot_930')
+              const clickedButtonId = message.interactive?.button_reply?.id || null;
+              let slotTitle = clickedButtonId;
+              // try to read human-friendly title from slots message definition
+              const slotsMsg = messageLibraryService.getMessageById('msg_sharma_slots_interactive');
+              if (slotsMsg && slotsMsg.contentPayload && Array.isArray(slotsMsg.contentPayload.buttons)) {
+                const btn = slotsMsg.contentPayload.buttons.find(b => b.buttonId === clickedButtonId);
+                if (btn) slotTitle = btn.title;
+              }
+
+              // store bookingTime as slotTitle; will attempt to parse when finalizing
+              await bookingService.createPendingBooking(message.from, { bookingTime: slotTitle, meta: { slotTitle } });
+
+              // forward confirm message
+              if (result.nextMessage) await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+              return;
+            } catch (err) {
+              console.error('Error saving pending booking slot selection:', err);
+            }
+          }
+        } catch (err) {
+          console.error('Unexpected error in interactive booking helper:', err);
+        }
+        // --- end interactive booking helpers ---
+
       // If trigger asks to mark arrived (button or keyword)
       if (trigger.nextAction === 'mark_arrived') {
         console.log(`🔔 Mark arrived requested for ${message.from}`);
@@ -293,6 +339,47 @@ async function handleInteractiveResponse(message) {
           }
         } catch (err) {
           console.error('Failed to process mark_arrived_selected:', err);
+        }
+        return;
+      }
+
+      // Handle Confirm & Pay button (mark pending as awaiting payment)
+      if (trigger.triggerId === 'trigger_confirm_pay' || trigger.triggerValue === 'btn_confirm_pay') {
+        try {
+          const pending = await bookingService.getPendingBookingForUser(message.from);
+          if (pending) {
+            await bookingService.createPendingBooking(message.from, { ...pending, meta: { ...(pending.meta||{}), status: 'awaiting_payment' } });
+          }
+        } catch (err) {
+          console.error('Error marking pending booking awaiting payment:', err);
+        }
+        return;
+      }
+
+      // Handle Payment Completed button: finalize booking
+      if (trigger.triggerId === 'trigger_payment_done' || trigger.triggerValue === 'btn_payment_done') {
+        try {
+          const pending = await bookingService.getPendingBookingForUser(message.from);
+          if (!pending) {
+            await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'No pending booking found. Please start booking again.' } }, message.from);
+            return;
+          }
+
+          // Ensure patient exists
+          let patient = await patientService.getPatientByPhone(message.from);
+          if (!patient) {
+            patient = await patientService.createPatient({ name: pending.meta?.patientName || 'Unknown', phoneNumber: message.from });
+          }
+
+          const bookingTime = pending.bookingTime || new Date().toISOString();
+          const booking = await bookingService.createBooking({ patientId: patient.id, doctorId: pending.doctorId, bookingTime, meta: pending.meta || {} });
+          await bookingService.deletePendingBooking(message.from);
+
+          await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `✅ Your appointment is confirmed. Booking ID: ${booking.id}` } }, message.from);
+          await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: `Appointment created: ${booking.id}`, patientId: patient.id, doctorId: booking.doctorId, bookingId: booking.id, isResponse: false });
+        } catch (err) {
+          console.error('Error finalizing booking after payment:', err);
+          await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'We could not finalize your booking. Please contact reception.' } }, message.from);
         }
         return;
       }

@@ -65,6 +65,39 @@ class BookingService {
     }
   }
 
+  // Pending booking helpers (used for interactive multi-step appointment flow)
+  async createPendingBooking(userPhone, { patientId = null, doctorId = null, bookingTime = null, meta = {} } = {}) {
+    try {
+      const payload = { userPhone, patientId, doctorId, bookingTime, meta, createdAt: new Date(), updatedAt: new Date() };
+      await db.collection('pendingBookings').doc(userPhone).set(payload, { merge: true });
+      return payload;
+    } catch (error) {
+      console.error('Error creating pending booking:', error);
+      throw error;
+    }
+  }
+
+  async getPendingBookingForUser(userPhone) {
+    try {
+      const doc = await db.collection('pendingBookings').doc(userPhone).get();
+      if (!doc.exists) return null;
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error('Error fetching pending booking:', error);
+      throw error;
+    }
+  }
+
+  async deletePendingBooking(userPhone) {
+    try {
+      await db.collection('pendingBookings').doc(userPhone).delete();
+      return true;
+    } catch (error) {
+      console.error('Error deleting pending booking:', error);
+      throw error;
+    }
+  }
+
   // Mark a booking as arrived (patient has checked in at hospital)
   async markArrived(bookingId, { arrivalLocation = null, checkedInBy = null } = {}) {
     try {
