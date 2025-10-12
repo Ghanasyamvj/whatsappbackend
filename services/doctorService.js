@@ -67,17 +67,18 @@ class DoctorService {
   // Get doctors by specialization
   async getDoctorsBySpecialization(specialization) {
     try {
-      // Query by specialization and isActive only; treat missing isAvailable as available
+      // Query by specialization only; treat missing isActive as active
       const snapshot = await this.collection
         .where('specialization', '==', specialization)
-        .where('isActive', '==', true)
         .get();
 
       const doctors = [];
       snapshot.forEach(doc => {
         const d = { id: doc.id, ...doc.data() };
-        // If isAvailable explicitly false, skip
-        if (d.hasOwnProperty('isAvailable') && d.isAvailable === false) return;
+  // Skip if isActive explicitly false
+  if (d.hasOwnProperty('isActive') && d.isActive === false) return;
+  // If isAvailable explicitly false, skip
+  if (d.hasOwnProperty('isAvailable') && d.isAvailable === false) return;
         doctors.push(d);
       });
 

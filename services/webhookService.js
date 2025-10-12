@@ -191,7 +191,12 @@ async function handleInteractiveResponse(message) {
 
           if (candidates.length === 0) {
             // No bookings found
-            await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'We could not find any upcoming bookings for you. Please check at reception.' } }, phone);
+            try {
+              await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'We could not find any upcoming bookings for you. Please check at reception.' } }, phone);
+            } catch (sendErr) {
+              console.error('Failed to send WhatsApp message, saving message record instead:', sendErr?.message || sendErr);
+              await flowService.createMessageWithFlow({ userPhone: phone, messageType: 'text', content: 'We could not find any upcoming bookings for you. Please check at reception.', isResponse: false });
+            }
             return;
           }
 
@@ -199,7 +204,12 @@ async function handleInteractiveResponse(message) {
             // Single booking: mark arrived
             const chosen = candidates[0];
             await bookingService.markArrived(chosen.id, { arrivalLocation: null, checkedInBy: 'whatsapp' });
-            await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `Thanks ${patient.name || ''}, we have recorded your arrival for ${chosen.bookingTimeObj.toLocaleString()}. Please proceed to reception.` } }, phone);
+            try {
+              await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `Thanks ${patient.name || ''}, we have recorded your arrival for ${chosen.bookingTimeObj.toLocaleString()}. Please proceed to reception.` } }, phone);
+            } catch (sendErr) {
+              console.error('Failed to send WhatsApp message, saving message record instead:', sendErr?.message || sendErr);
+              await flowService.createMessageWithFlow({ userPhone: phone, messageType: 'text', content: `Thanks ${patient.name || ''}, we have recorded your arrival for ${chosen.bookingTimeObj.toLocaleString()}. Please proceed to reception.`, isResponse: false });
+            }
 
             // notify doctor
             if (chosen.doctorId) {
@@ -235,7 +245,12 @@ async function handleInteractiveResponse(message) {
             }
           };
 
-          await messageLibraryService.sendLibraryMessage(listMessage, phone);
+          try {
+            await messageLibraryService.sendLibraryMessage(listMessage, phone);
+          } catch (sendErr) {
+            console.error('Failed to send interactive list via WhatsApp, saving message record instead:', sendErr?.message || sendErr);
+            await flowService.createMessageWithFlow({ userPhone: phone, messageType: 'interactive', content: listMessage.contentPayload, isResponse: false });
+          }
           return;
         } catch (err) {
           console.error('❌ Failed to handle mark_arrived:', err);
