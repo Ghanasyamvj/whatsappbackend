@@ -695,12 +695,77 @@ async function handleFlowResponse(message) {
           console.error('⚠️  Failed to mark flow tracking completed:', err.message || err);
         }
 
-        // Send confirmation text to user
+        // Send interactive confirmation with a deterministic Next button that routes to welcome
         try {
-          const { sendTextMessage } = require('./whatsappService');
-          await sendTextMessage(message.from, 'Thanks — we received your response and saved it.');
+          const phone = message.from;
+
+          // Build an interactive 'Thanks — Next' message (deterministic ids)
+          const btnId = 'btn_next_welcome';
+          const messageObj = {
+            // messageId will be assigned by addMessage; keep name for readability
+            name: 'Response Saved - Next',
+            type: 'interactive_button',
+            status: 'published',
+            contentPayload: {
+              header: 'Thank you',
+              body: 'Thanks — we received your response and saved it. Click Next to continue to Hospital Services.',
+              footer: 'We are here to help',
+              buttons: [
+                {
+                  buttonId: btnId,
+                  title: 'Next',
+                  triggerId: 'trigger_next_welcome',
+                  nextAction: 'send_message',
+                  targetMessageId: 'msg_welcome_interactive'
+                }
+              ]
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
+          // Add message to library (in-memory) and get saved entry
+          let savedMsg;
+          try {
+            savedMsg = messageLibraryService.addMessage(messageObj);
+          } catch (e) {
+            // Fallback: if addMessage fails, create a minimal object
+            savedMsg = { messageId: `msg_response_saved_${Date.now()}`, ...messageObj };
+            if (!messageLibraryService.messages) messageLibraryService.messages = [];
+            messageLibraryService.messages.push(savedMsg);
+          }
+
+          // Register deterministic trigger if not present
+          try {
+            const exists = (messageLibraryService.triggers || []).find(t => t.triggerId === 'trigger_next_welcome' || t.triggerValue === btnId);
+            if (!exists) {
+              const newTrig = {
+                triggerId: 'trigger_next_welcome',
+                triggerType: 'button_click',
+                triggerValue: btnId,
+                nextAction: 'send_message',
+                targetId: 'msg_welcome_interactive',
+                messageId: savedMsg.messageId,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              };
+              if (!messageLibraryService.triggers) messageLibraryService.triggers = [];
+              messageLibraryService.triggers.push(newTrig);
+            }
+          } catch (e) {
+            console.error('⚠️ Failed to register next-welcome trigger:', e.message || e);
+          }
+
+          // Try to send the interactive message via library
+          try {
+            await messageLibraryService.sendLibraryMessage(savedMsg, phone);
+            console.log('📤 Welcome/Next interactive message sent to', phone);
+          } catch (sendErr) {
+            console.error('⚠️ Failed to send welcome-next interactive message, persisting instead:', sendErr?.message || sendErr);
+            await flowService.createMessageWithFlow({ userPhone: phone, messageType: 'interactive', content: savedMsg.contentPayload, isResponse: false });
+          }
         } catch (err) {
-          console.error('⚠️  Failed to send confirmation message to user:', err.message || err);
+          console.error('⚠️  Failed to send interactive Next message to user:', err.message || err);
         }
       } catch (error) {
         console.error('❌ Failed to save flow response:', error);
