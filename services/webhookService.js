@@ -4,6 +4,7 @@ const { findMatchingTrigger } = require('./triggerService');
 const messageLibraryService = require('./messageLibraryService');
 const patientService = require('./patientService');
 const doctorService = require('./doctorService');
+const bookingService = require('./bookingService');
 
 /**
  * Process incoming webhook payload from WhatsApp Business API
@@ -403,19 +404,28 @@ async function processAppointmentFlow(formData, userPhone) {
     const doctors = await doctorService.getDoctorsBySpecialization(specialization);
     if (doctors.length > 0) {
       const assignedDoctor = doctors[0]; // Simple assignment logic
-      
-      // Create message with appointment details
-      const appointmentMessage = {
-        userPhone: userPhone,
-        messageType: 'text',
-        content: `🏥 Appointment Booked!\n\n👤 Patient: ${patientName}\n👨‍⚕️ Doctor: ${assignedDoctor.name}\n🏥 Department: ${assignedDoctor.specialization}\n📞 Contact: ${assignedDoctor.phoneNumber}\n\nYour appointment has been scheduled. The doctor will contact you soon.`,
-        patientId: patient?.id,
-        doctorId: assignedDoctor.id,
-        isResponse: false
-      };
+      // Create booking record
+      try {
+        const bookingTime = preferredDate || new Date().toISOString();
+        const booking = await bookingService.createBooking({ patientId: patient?.id, doctorId: assignedDoctor.id, bookingTime });
+        console.log('✅ Booking created:', booking.id);
 
-      await flowService.createMessageWithFlow(appointmentMessage);
-      console.log('✅ Appointment confirmation message created');
+        // Create message with appointment details and booking reference
+        const appointmentMessage = {
+          userPhone: userPhone,
+          messageType: 'text',
+          content: `🏥 Appointment Booked!\n\n👤 Patient: ${patientName}\n👨‍⚕️ Doctor: ${assignedDoctor.name}\n🏥 Department: ${assignedDoctor.specialization}\n📞 Contact: ${assignedDoctor.phoneNumber}\n📅 Time: ${new Date(booking.bookingTime).toLocaleString()}\n\nYour booking reference: ${booking.id}\nThe doctor will contact you soon.`,
+          patientId: patient?.id,
+          doctorId: assignedDoctor.id,
+          bookingId: booking.id,
+          isResponse: false
+        };
+
+        await flowService.createMessageWithFlow(appointmentMessage);
+        console.log('✅ Appointment confirmation message and booking created');
+      } catch (bkErr) {
+        console.error('❌ Failed to create booking or appointment message:', bkErr);
+      }
     } else {
       // No doctors available
       const noDocMessage = {

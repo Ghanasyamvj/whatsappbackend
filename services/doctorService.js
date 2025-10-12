@@ -17,6 +17,11 @@ class DoctorService {
       };
 
       const docRef = await this.collection.add(doctor);
+      try {
+        await this.collection.doc(docRef.id).update({ doctorId: docRef.id });
+      } catch (e) {
+        console.error('Failed to write doctorId into document:', e);
+      }
       return { id: docRef.id, ...doctor };
     } catch (error) {
       console.error('Error creating doctor:', error);

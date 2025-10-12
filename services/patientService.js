@@ -18,6 +18,12 @@ class PatientService {
 
       const docRef = await this.collection.add(patient);
       console.info('Created patient', { id: docRef.id, phoneNumber: patient.phoneNumber, timestamp: new Date().toISOString() });
+      // Ensure the document contains its own id for easy referencing
+      try {
+        await this.collection.doc(docRef.id).update({ patientId: docRef.id });
+      } catch (e) {
+        console.error('Failed to write patientId into document:', e);
+      }
       // Write audit record
       try {
         await this.auditCollection.add({
@@ -30,7 +36,7 @@ class PatientService {
         console.error('Failed to write patient create audit:', auditErr);
       }
 
-      return { id: docRef.id, ...patient };
+  return { id: docRef.id, ...patient };
     } catch (error) {
       console.error('Error creating patient:', error);
       throw error;
