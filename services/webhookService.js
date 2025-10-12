@@ -136,7 +136,30 @@ async function handleInteractiveResponse(message) {
   try {
     console.log(`🔘 Processing interactive response from ${message.from}:`, message.interactive);
     
-    const result = messageLibraryService.processInteractiveResponse(message.interactive);
+    let result = messageLibraryService.processInteractiveResponse(message.interactive);
+
+    // If the library didn't find a trigger (could be id mismatch), attempt to resolve from raw payload
+    if ((!result || !result.trigger) && message.interactive) {
+      try {
+        const rawButtonId = message.interactive?.button_reply?.id || null;
+        const rawListId = message.interactive?.list_reply?.id || null;
+        if (rawButtonId) {
+          const btnTrig = messageLibraryService.findButtonTrigger(rawButtonId);
+          if (btnTrig) {
+            result = { trigger: btnTrig, nextMessage: messageLibraryService.getMessageById(btnTrig.targetId) };
+            console.log('🔎 Resolved trigger from raw button id:', rawButtonId, '->', btnTrig.triggerId);
+          }
+        } else if (rawListId) {
+          const listTrig = messageLibraryService.findListTrigger(rawListId);
+          if (listTrig) {
+            result = { trigger: listTrig, nextMessage: messageLibraryService.getMessageById(listTrig.targetId) };
+            console.log('🔎 Resolved trigger from raw list id:', rawListId, '->', listTrig.triggerId);
+          }
+        }
+      } catch (err) {
+        console.error('Error resolving interactive trigger from raw payload:', err);
+      }
+    }
 
     if (result && result.trigger) {
       const trigger = result.trigger;
