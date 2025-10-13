@@ -12,6 +12,7 @@ const patientRoutes = require('./routes/patients');
 const doctorRoutes = require('./routes/doctors');
 const flowRoutes = require('./routes/flows');
 const bookingRoutes = require('./routes/bookings');
+const prescriptionRoutes = require('./routes/prescriptions');
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use('/api/patients', patientRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/flows', flowRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
