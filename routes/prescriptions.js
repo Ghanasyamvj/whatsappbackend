@@ -68,8 +68,17 @@ router.post('/send', async (req, res) => {
     // Create a personalized payment message and register a dynamic trigger so
     // when the user clicks Pay Now they see the payment link WITH the prescription summary.
     try {
+      // Use a timestamp + small random suffix so created messages/buttons get unique ids
+      const ts = Date.now();
+      const rnd = Math.random().toString(36).slice(2, 6);
+      const confirmMsgId = `msg_order_pres_${ts}_${rnd}`;
+      const payMsgId = `msg_payment_pres_${ts}_${rnd}`;
+      const payNowButtonId = `btn_prescription_pay_now_${ts}_${rnd}`;
+      const doneButtonId = `btn_payment_done_${ts}_${rnd}`;
+
       // Create a confirmation message for this prescription payment (Order placed -> proceed to pharmacy)
       const confirmMedicineMsg = messageLibraryService.addMessage({
+        messageId: confirmMsgId,
         name: 'Order Placed - Prescription',
         type: 'interactive_button',
         status: 'published',
@@ -90,11 +99,8 @@ router.post('/send', async (req, res) => {
       });
 
       // Build personalized payment message with a unique 'payment done' button id so it maps to the confirmation above
-      const ts = Date.now();
-      const payNowButtonId = `btn_prescription_pay_now_${ts}`;
-      const doneButtonId = `btn_payment_done_${ts}`;
       const paymentPayload = {
-        messageId: `msg_payment_pres_${ts}`,
+        messageId: payMsgId,
         name: 'Payment Required - Prescription',
         type: 'interactive_button',
         status: 'published',
@@ -103,7 +109,7 @@ router.post('/send', async (req, res) => {
           body: `Please perform your payment to confirm the prescription:\n\n💊 ${medicineName} - ${dosage} (${frequency})\n📅 Duration: ${duration} days\n\n[Payment Link: https://pay.hospital.com/abc123]`,
           footer: 'Secure payment powered by Razorpay',
           buttons: [
-            { buttonId: doneButtonId, title: '✅ Payment Completed', triggerId: `trigger_payment_done_${ts}`, nextAction: 'send_message', targetMessageId: confirmMedicineMsg.messageId },
+            { buttonId: doneButtonId, title: '✅ Payment Completed', triggerId: `trigger_payment_done_${ts}_${rnd}`, nextAction: 'send_message', targetMessageId: confirmMsgId },
             { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' },
             { buttonId: 'btn_cancel_payment', title: '❌ Cancel', triggerId: 'trigger_cancel_payment', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
           ]
@@ -111,13 +117,13 @@ router.post('/send', async (req, res) => {
       };
 
       // Add the personalized payment message to the in-memory message library so it can be sent on trigger
-      const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
+  const addedPaymentMsg = messageLibraryService.addMessage({ messageId: paymentPayload.messageId, name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
 
       // Register dynamic trigger so clicking the Pay Now button on the prescription
       // sends the personalized payment message we just added. Use a unique Pay Now button id
       // to avoid colliding with global/static triggers.
       const dynamicTriggerPayNow = {
-        triggerId: `trigger_pres_pay_now_${ts}`,
+        triggerId: `trigger_pres_pay_now_${ts}_${rnd}`,
         triggerType: 'button_click',
         triggerValue: payNowButtonId,
         nextAction: 'send_message',
@@ -130,7 +136,7 @@ router.post('/send', async (req, res) => {
       // Register dynamic trigger so clicking the unique payment-done button in the personalized
       // payment message maps to the final confirmation message.
       const dynamicTriggerDone = {
-        triggerId: `trigger_payment_done_${ts}`,
+        triggerId: `trigger_payment_done_${ts}_${rnd}`,
         triggerType: 'button_click',
         triggerValue: doneButtonId,
         nextAction: 'send_message',
