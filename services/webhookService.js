@@ -190,23 +190,32 @@ async function handleIncomingMessage(message) {
               console.log('⚠️ msg_welcome_interactive not found in library');
             }
           } else {
-            console.log('ℹ️ No patient found for phone, sending new patient form');
-            const newPatientMsg = messageLibraryService.getMessageById('msg_new_patient_form') || messageLibraryService.getMessageById('msg_new_or_existing');
-            if (newPatientMsg) {
-              try {
-                await messageLibraryService.sendLibraryMessage(newPatientMsg, message.from);
-                console.log('✅ New patient form sent');
-              } catch (err) {
-                console.error('Failed to send new-patient form, persisting message instead:', err?.message || err);
-                // Persist as a text fallback if interactive cannot be sent
-                if (newPatientMsg.type === 'standard_text') {
-                  await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: newPatientMsg.contentPayload.body, isResponse: false });
-                } else {
-                  await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'interactive', content: newPatientMsg.contentPayload, isResponse: false });
+            // Start the registration flow instead of sending the static form text
+            const registrationFlowId = '1366099374850695';
+            console.log('ℹ️ No patient found for phone, starting registration flow:', registrationFlowId);
+            const flowToken = `flow_token_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+            try {
+              await flowService.createFlowTracking({ userPhone: message.from, flowId: registrationFlowId, flowToken, status: 'sent' });
+              await sendFlowMessage(message.from, registrationFlowId, 'Please complete this registration form:', flowToken);
+              console.log('✅ Registration flow started for', message.from);
+            } catch (err) {
+              console.error('Failed to start registration flow, falling back to sending/persisting form text:', err?.message || err);
+              const newPatientMsg = messageLibraryService.getMessageById('msg_new_patient_form') || messageLibraryService.getMessageById('msg_new_or_existing');
+              if (newPatientMsg) {
+                try {
+                  await messageLibraryService.sendLibraryMessage(newPatientMsg, message.from);
+                  console.log('✅ Fallback: New patient form sent');
+                } catch (sendErr) {
+                  console.error('Fallback send failed, persisting message instead:', sendErr?.message || sendErr);
+                  if (newPatientMsg.type === 'standard_text') {
+                    await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: newPatientMsg.contentPayload.body, isResponse: false });
+                  } else {
+                    await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'interactive', content: newPatientMsg.contentPayload, isResponse: false });
+                  }
                 }
+              } else {
+                console.log('⚠️ msg_new_patient_form not found in library for fallback');
               }
-            } else {
-              console.log('⚠️ msg_new_patient_form not found in library');
             }
           }
         } catch (err) {
