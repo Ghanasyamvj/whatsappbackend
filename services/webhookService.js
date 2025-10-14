@@ -168,7 +168,54 @@ async function handleIncomingMessage(message) {
     
     if (matchingTriggers.length > 0) {
       console.log(`🎯 Found ${matchingTriggers.length} matching trigger(s)`);
-      
+      // Special-case: if one of the matching triggers is the "hi"/welcome trigger,
+      // check Firestore for an existing patient by phone and send the appropriate
+      // welcome or new-patient message instead of the default library flow.
+      const hasHiTrigger = matchingTriggers.some(t => t.triggerId === 'trigger_hi');
+      if (hasHiTrigger) {
+        try {
+          const patient = await patientService.getPatientByPhone(message.from).catch(() => null);
+          if (patient) {
+            console.log('ℹ️ Existing patient found for phone, sending welcome interactive');
+            const welcomeMsg = messageLibraryService.getMessageById('msg_welcome_interactive');
+            if (welcomeMsg) {
+              try {
+                await messageLibraryService.sendLibraryMessage(welcomeMsg, message.from);
+                console.log('✅ Welcome interactive sent');
+              } catch (err) {
+                console.error('Failed to send welcome interactive, persisting message instead:', err?.message || err);
+                await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'interactive', content: welcomeMsg.contentPayload, isResponse: false });
+              }
+            } else {
+              console.log('⚠️ msg_welcome_interactive not found in library');
+            }
+          } else {
+            console.log('ℹ️ No patient found for phone, sending new patient form');
+            const newPatientMsg = messageLibraryService.getMessageById('msg_new_patient_form') || messageLibraryService.getMessageById('msg_new_or_existing');
+            if (newPatientMsg) {
+              try {
+                await messageLibraryService.sendLibraryMessage(newPatientMsg, message.from);
+                console.log('✅ New patient form sent');
+              } catch (err) {
+                console.error('Failed to send new-patient form, persisting message instead:', err?.message || err);
+                // Persist as a text fallback if interactive cannot be sent
+                if (newPatientMsg.type === 'standard_text') {
+                  await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: newPatientMsg.contentPayload.body, isResponse: false });
+                } else {
+                  await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'interactive', content: newPatientMsg.contentPayload, isResponse: false });
+                }
+              }
+            } else {
+              console.log('⚠️ msg_new_patient_form not found in library');
+            }
+          }
+        } catch (err) {
+          console.error('Error during hi-trigger patient lookup:', err);
+        }
+        // We've handled the hi trigger explicitly; do not continue with the generic loop
+        return;
+      }
+
         for (const trigger of matchingTriggers) {
           if (trigger.nextAction === 'send_message') {
           // Get the message from library
