@@ -1,5 +1,6 @@
 const axios = require('axios');
 const doctorService = require('./doctorService');
+const bookingService = require('./bookingService');
 const { db } = require('../config/firebase');
 
 // Message Library Integration Service
@@ -767,6 +768,19 @@ class MessageLibraryService {
       if (messageEntry && messageEntry.messageId === 'msg_confirm_appointment') {
         messageEntry.contentPayload = messageEntry.contentPayload || {};
         messageEntry.contentPayload.header = 'Confirm Your Appointment ✅';
+        // Attempt to inject selected doctor's name from pending booking for this recipient so the body shows correct doctor
+        try {
+          const pending = await bookingService.getPendingBookingForUser(recipientPhone).catch(() => null);
+          const doctorName = pending && pending.meta && pending.meta.doctorName ? pending.meta.doctorName : null;
+          if (doctorName && messageEntry.contentPayload.body) {
+            const bodyStr = String(messageEntry.contentPayload.body);
+            const replaced = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, doctorName);
+            messageEntry.contentPayload.body = replaced;
+            console.log('ℹ️ Injected doctorName into confirm body from pending booking:', doctorName);
+          }
+        } catch (e) {
+          console.warn('Could not inject doctorName into confirm body:', e?.message || e);
+        }
       }
     } catch (e) {
       console.warn('Failed to enforce static confirm header:', e?.message || e);
