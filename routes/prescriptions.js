@@ -2,8 +2,7 @@ const express = require('express');
 const { sendTextMessage } = require('../services/whatsappService');
 const messageLibraryService = require('../services/messageLibraryService');
 const flowService = require('../services/flowService');
-const bookingService = require('../services/bookingService');
-const patientService = require('../services/patientService');
+// NOTE: do not persist bookings for lab tests; include scheduled time directly in messages
 
 const router = express.Router();
 
@@ -254,33 +253,10 @@ router.post('/send-labtest', async (req, res) => {
 
     // Register personalized payment message & dynamic trigger for lab pay now (similar to medicine flow)
     try {
-        // Ensure patient exists and create a booking first (if atime provided)
-        let booking = null;
-        try {
-          let patient = null;
-          if (patientId) {
-            patient = await patientService.getPatientById(patientId).catch(() => null);
-          }
-          if (!patient && phoneNumber) {
-            const digits = phoneNumber.replace(/\D/g, '');
-            const formattedPhoneForLookup = digits.length === 10 && !digits.startsWith('91') ? '91' + digits : digits;
-            patient = await patientService.getPatientByPhone(formattedPhoneForLookup).catch(() => null);
-          }
-          if (!patient) {
-            const created = await patientService.createPatient({ name: patientName || 'Unknown', phoneNumber: phoneNumber });
-            patient = created;
-          }
-          if (atime) {
-            booking = await bookingService.createBooking({ patientId: patient.id, bookingTime: atime, meta: { labTestName, notes } });
-          }
-        } catch (e) {
-          console.warn('Could not create booking or ensure patient exists for lab test:', e?.message || e);
-        }
-
-        // Build confirmation payload (use booking details when available)
+        // Do not persist booking; use provided atime directly in messages
         const confirmLabPayload = {
           header: 'Lab Booking Confirmed ✅',
-          body: booking ? `Your lab test booking for ${labTestName} is scheduled on ${new Date(booking.bookingTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}. Booking ID: ${booking.id || booking.bookingId}` : `Your lab test booking for ${labTestName} has been confirmed. Please proceed to the lab at the scheduled time.`,
+          body: atime ? `Your lab test booking for ${labTestName} is scheduled on ${new Date(atime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}.` : `Your lab test booking for ${labTestName} has been confirmed. Please proceed to the lab at the scheduled time.`,
           footer: 'Thank you for choosing our lab services',
           buttons: [
             {
@@ -317,18 +293,18 @@ router.post('/send-labtest', async (req, res) => {
     }
   };
 
-  // If we created a booking, add booking details into the interactive and payment payloads so the user sees schedule/booking id
-  if (typeof booking !== 'undefined' && booking) {
+  // Insert schedule info into messages based on provided atime (no persistence)
+  if (atime) {
     try {
-      const scheduledText = `\n\n🗓️ Scheduled: ${new Date(booking.bookingTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n🆔 Booking ID: ${booking.id || booking.bookingId}`;
+      const scheduledText = `\n\n🗓️ Scheduled: ${new Date(atime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
       if (interactiveLabPrescription && interactiveLabPrescription.contentPayload && typeof interactiveLabPrescription.contentPayload.body === 'string') {
         interactiveLabPrescription.contentPayload.body = interactiveLabPrescription.contentPayload.body + scheduledText;
       }
       if (paymentPayloadLab && paymentPayloadLab.contentPayload && typeof paymentPayloadLab.contentPayload.body === 'string') {
         paymentPayloadLab.contentPayload.body = paymentPayloadLab.contentPayload.body + scheduledText;
       }
-      // Also add a compact scheduled string in footer/header for visibility
-      const scheduledCompact = `Scheduled: ${new Date(booking.bookingTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} | Booking: ${booking.id || booking.bookingId}`;
+      // Also add compact scheduled text in footer for visibility
+      const scheduledCompact = `Scheduled: ${new Date(atime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
       try {
         if (interactiveLabPrescription && interactiveLabPrescription.contentPayload) {
           interactiveLabPrescription.contentPayload.footer = (interactiveLabPrescription.contentPayload.footer || '') + '\n' + scheduledCompact;
@@ -337,10 +313,10 @@ router.post('/send-labtest', async (req, res) => {
           paymentPayloadLab.contentPayload.footer = (paymentPayloadLab.contentPayload.footer || '') + '\n' + scheduledCompact;
         }
       } catch (e) {
-        console.warn('Could not append compact booking info to footer/header:', e?.message || e);
+        console.warn('Could not append compact scheduled info to footer/header:', e?.message || e);
       }
     } catch (e) {
-      console.warn('Could not append booking details to messages:', e?.message || e);
+      console.warn('Could not append scheduled details to messages:', e?.message || e);
     }
   }
 
@@ -393,7 +369,6 @@ router.post('/send-labtest', async (req, res) => {
     // Diagnostic logs: show atime and booking details and payloads
     try {
       console.log('ℹ️ send-labtest - received atime:', atime);
-      console.log('ℹ️ send-labtest - booking (if created):', booking);
       console.log('ℹ️ send-labtest - interactive body preview:', interactiveLabPrescription?.contentPayload?.body?.slice(0, 400));
       console.log('ℹ️ send-labtest - payment body preview:', paymentPayloadLab?.contentPayload?.body?.slice(0, 400));
     } catch (e) {
@@ -403,7 +378,7 @@ router.post('/send-labtest', async (req, res) => {
     try {
       const result = await messageLibraryService.sendLibraryMessage(interactiveLabPrescription, formattedPhone);
   console.log('✅ Interactive lab prescription sent successfully:', result);
-  res.json({ success: true, data: { messageId: result.messageId, phoneNumber: formattedPhone, patientName, labTestName, timestamp: result.timestamp, booking: booking || null }, message: 'Lab test prescription sent successfully via WhatsApp' });
+  res.json({ success: true, data: { messageId: result.messageId, phoneNumber: formattedPhone, patientName, labTestName, timestamp: result.timestamp, scheduledAt: atime || null }, message: 'Lab test prescription sent successfully via WhatsApp' });
     } catch (err) {
       console.error('❌ Failed to send interactive lab prescription via WhatsApp:', err?.message || err);
       try {
