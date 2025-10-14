@@ -378,12 +378,17 @@ async function handleInteractiveResponse(message) {
           await bookingService.createPendingBooking(message.from, { doctorId: rawListId, meta: { doctorName: doc.name } });
           // send slots message (best-effort)
           const slotsMsg = messageLibraryService.getMessageById('msg_sharma_slots_interactive');
-          if (slotsMsg) {
+              if (slotsMsg) {
             try {
-              // clone and inject doctor's name into header
+              // clone and inject doctor's name into header, preserving the template suffix
               const msgToSend = JSON.parse(JSON.stringify(slotsMsg));
               msgToSend.contentPayload = msgToSend.contentPayload || {};
-              msgToSend.contentPayload.header = doc.name || msgToSend.contentPayload.header;
+              if (doc && doc.name) {
+                const originalHeader = String(msgToSend.contentPayload.header || '');
+                const suffixMatch = originalHeader.match(/(\s*-\s*Available Slots[\s\S]*)$/i);
+                const suffix = suffixMatch ? suffixMatch[1] : ' - Available Slots 📅';
+                msgToSend.contentPayload.header = `${doc.name}${suffix}`;
+              }
               await messageLibraryService.sendLibraryMessage(msgToSend, message.from);
             } catch (e) { console.error('Failed to send slots message in fallback', e); }
           }
@@ -537,10 +542,13 @@ async function handleInteractiveResponse(message) {
             // 1) Try to get doctorName from a pending booking for this user (covers reschedule flows)
             try {
               const pending = await bookingService.getPendingBookingForUser(message.from).catch(() => null);
-              if (pending && pending.meta && pending.meta.doctorName) {
+                if (pending && pending.meta && pending.meta.doctorName) {
                 msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
                 msgToSend.contentPayload = msgToSend.contentPayload || {};
-                msgToSend.contentPayload.header = pending.meta.doctorName || msgToSend.contentPayload.header;
+                const originalHeader = String(msgToSend.contentPayload.header || '');
+                const suffixMatch = originalHeader.match(/(\s*-\s*Available Slots[\s\S]*)$/i);
+                const suffix = suffixMatch ? suffixMatch[1] : ' - Available Slots 📅';
+                msgToSend.contentPayload.header = `${pending.meta.doctorName}${suffix}`;
                 injected = true;
                 console.log('ℹ️ Injected doctorName from pending booking for slots message:', pending.meta.doctorName);
               }
@@ -555,7 +563,10 @@ async function handleInteractiveResponse(message) {
                 if (doc) {
                   msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
                   msgToSend.contentPayload = msgToSend.contentPayload || {};
-                  msgToSend.contentPayload.header = doc.name || msgToSend.contentPayload.header;
+                  const originalHeader = String(msgToSend.contentPayload.header || '');
+                  const suffixMatch = originalHeader.match(/(\s*-\s*Available Slots[\s\S]*)$/i);
+                  const suffix = suffixMatch ? suffixMatch[1] : ' - Available Slots 📅';
+                  msgToSend.contentPayload.header = `${doc.name}${suffix}`;
                   injected = true;
                 }
               } catch (e) {
@@ -591,7 +602,10 @@ async function handleInteractiveResponse(message) {
                 if (inferred) {
                   msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
                   msgToSend.contentPayload = msgToSend.contentPayload || {};
-                  msgToSend.contentPayload.header = inferred;
+                  const originalHeader = String(msgToSend.contentPayload.header || '');
+                  const suffixMatch = originalHeader.match(/(\s*-\s*Available Slots[\s\S]*)$/i);
+                  const suffix = suffixMatch ? suffixMatch[1] : ' - Available Slots 📅';
+                  msgToSend.contentPayload.header = `${inferred}${suffix}`;
                   injected = true;
                   console.log('ℹ️ Injected doctorName inferred from recent messages for slots message:', inferred);
                 }

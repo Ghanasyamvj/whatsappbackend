@@ -905,8 +905,9 @@ class MessageLibraryService {
         if (messagePayload && messagePayload.type === 'interactive' && messagePayload.interactive) {
           const headerText = messagePayload.interactive.header?.text || (messageEntry && messageEntry.contentPayload && messageEntry.contentPayload.header) || null;
           const bodyText = messagePayload.interactive.body && (typeof messagePayload.interactive.body === 'object' ? messagePayload.interactive.body.text : messagePayload.interactive.body);
-          if (headerText && bodyText && /Dr\.?\s+/i.test(bodyText)) {
-            const replacedBody = String(bodyText).replace(/Dr\.?\s+[^\n\r]*/i, String(headerText));
+          // Only normalize when header appears to contain a doctor's name (e.g., 'Dr. Smith')
+          if (headerText && /Dr\.?\s+/i.test(String(headerText)) && bodyText && /Dr\.?\s+/i.test(bodyText)) {
+              const replacedBody = String(bodyText).replace(/Dr\.?\s+[^\n\r]*/i, String(headerText));
             if (messagePayload.interactive.body && typeof messagePayload.interactive.body === 'object') {
               messagePayload.interactive.body.text = replacedBody;
             } else {
