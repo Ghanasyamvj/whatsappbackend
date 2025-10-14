@@ -1,6 +1,7 @@
 const express = require('express');
 const { sendTextMessage } = require('../services/whatsappService');
 const messageLibraryService = require('../services/messageLibraryService');
+const flowService = require('../services/flowService');
 
 const router = express.Router();
 
@@ -42,8 +43,8 @@ router.post('/send', async (req, res) => {
       type: 'interactive_button',
       status: 'published',
       contentPayload: {
-        header: '� Prescription Details',
-        body: `👤 ${patientName}\n💊 ${medicineName}\n📋 ${dosage}\n⏰ ${frequency}\n📅 ${duration}\n\n_Prescribed on: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_`,
+        header: '🏥 Prescription Details',
+        body: `*Patient:* ${patientName}\n*Medicine:* ${medicineName}\n*Dosage:* ${dosage}\n*Frequency:* ${frequency}\n*Duration:* ${duration}\n\n_Prescribed on: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_`,
         footer: 'Tap Pay Now to complete payment or Pay Later to return to home',
         buttons: [
           {
@@ -71,15 +72,23 @@ router.post('/send', async (req, res) => {
       console.log('✅ Interactive prescription sent successfully:', result);
       res.json({ success: true, data: { messageId: result.messageId, phoneNumber: formattedPhone, patientName, medicineName, timestamp: result.timestamp }, message: 'Prescription sent successfully via WhatsApp' });
     } catch (err) {
-      console.error('❌ Failed to send interactive prescription via WhatsApp, falling back to text:', err?.message || err);
-      // fallback to sending plain text
-      const fallbackMessage = `Prescription for ${patientName}: ${medicineName} - ${dosage} - ${frequency} - ${duration}`;
+      console.error('❌ Failed to send interactive prescription via WhatsApp:', err?.message || err);
+      // Persist the interactive message so it remains inspectable in messages collection
       try {
-        const textResult = await sendTextMessage(formattedPhone, fallbackMessage);
-        res.json({ success: true, data: { messageId: textResult.messageId, phoneNumber: formattedPhone, patientName, medicineName, timestamp: textResult.timestamp }, message: 'Prescription sent as text via WhatsApp (fallback)' });
-      } catch (sendErr) {
-        console.error('❌ Failed to send fallback text prescription:', sendErr?.message || sendErr);
-        res.status(500).json({ success: false, error: 'Failed to send prescription', details: sendErr?.message || sendErr });
+        await flowService.createMessageWithFlow({ userPhone: formattedPhone, messageType: 'interactive', content: interactivePrescription.contentPayload, isResponse: false });
+        console.log('ℹ️ Interactive prescription persisted to messages collection as fallback');
+        res.json({ success: true, data: { persisted: true, phoneNumber: formattedPhone }, message: 'Interactive prescription persisted (WhatsApp send failed)' });
+      } catch (persistErr) {
+        console.error('❌ Failed to persist interactive prescription fallback:', persistErr?.message || persistErr);
+        // final fallback: send plain text
+        const fallbackMessage = `Prescription for ${patientName}: ${medicineName} - ${dosage} - ${frequency} - ${duration}`;
+        try {
+          const textResult = await sendTextMessage(formattedPhone, fallbackMessage);
+          res.json({ success: true, data: { messageId: textResult.messageId, phoneNumber: formattedPhone, patientName, medicineName, timestamp: textResult.timestamp }, message: 'Prescription sent as text via WhatsApp (final fallback)' });
+        } catch (sendErr) {
+          console.error('❌ Failed to send final fallback text prescription:', sendErr?.message || sendErr);
+          res.status(500).json({ success: false, error: 'Failed to send prescription', details: sendErr?.message || sendErr });
+        }
       }
     }
 
