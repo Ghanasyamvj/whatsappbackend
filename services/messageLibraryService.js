@@ -225,7 +225,7 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Confirm Your Appointment ✅',
+          header: 'Appointment Confirmation',
           body: 'Appointment Details:\n👨‍⚕️ Dr. Sharma\n📅 Monday, Oct 14\n🕘 9:30 AM\n💰 Fee: ₹750\n\nWould you like to confirm and proceed to payment?',
           footer: 'You can reschedule if needed',
           buttons: [
