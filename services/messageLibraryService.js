@@ -836,6 +836,70 @@ class MessageLibraryService {
     } catch (e) {
       console.warn('Error during confirm-body injection:', e?.message || e);
     }
+
+    // Replace placeholders {{doctorName}}, {{slotDate}}, {{slotTime}} deterministically
+    try {
+      if (messageEntry && messageEntry.contentPayload) {
+        const pending = await bookingService.getPendingBookingForUser(recipientPhone).catch(() => null);
+        const doctorName = pending && pending.meta && pending.meta.doctorName ? pending.meta.doctorName : null;
+        const rawSlot = pending && pending.meta && pending.meta.slotTitle ? pending.meta.slotTitle : (pending && pending.bookingTime ? pending.bookingTime : null);
+
+        let slotDate = '';
+        let slotTime = '';
+
+        if (rawSlot) {
+          // Prefer an explicit bookingTime ISO if available
+          if (pending && pending.bookingTime && typeof pending.bookingTime === 'string') {
+            try {
+              const dt = new Date(pending.bookingTime);
+              if (!isNaN(dt.getTime())) {
+                const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                slotDate = `${dt.getDate()} ${monthNames[dt.getMonth()]} ${dt.getFullYear()}`;
+              }
+            } catch (err) {
+              // fallback to label parsing
+            }
+          }
+
+          const slotStr = String(rawSlot).replace(/^\s*[\p{Emoji}\s]*/u, '').trim();
+          const timeMatch = slotStr.match(/\b\d{1,2}:\d{2}\b(?:\s*(?:AM|PM|am|pm))?/);
+          if (timeMatch) slotTime = timeMatch[0].trim();
+
+          if (!slotDate) {
+            // Remove weekday names like Mon, Monday, Tue, Tuesday, etc.
+            const cleaned = slotStr.replace(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s*,?/ig, '').trim();
+            slotDate = cleaned.replace(slotTime, '').trim();
+          }
+        }
+
+        const replaceIn = (s) => {
+          let out = String(s || '');
+          out = out.replace(/\{\{doctorName\}\}/g, doctorName || 'Doctor');
+          out = out.replace(/\{\{slotDate\}\}/g, slotDate || '');
+          out = out.replace(/\{\{slotTime\}\}/g, slotTime || '');
+
+          // Remove empty labeled lines to avoid showing blank Date/Time lines
+          if (!slotDate) {
+            out = out.replace(/(^|\n)\s*📅\s*Date:\s*\n?/g, '\n');
+            out = out.replace(/(^|\n)\s*Date:\s*\n?/g, '\n');
+          }
+          if (!slotTime) {
+            out = out.replace(/(^|\n)\s*⏰\s*Time:\s*\n?/g, '\n');
+            out = out.replace(/(^|\n)\s*Time:\s*\n?/g, '\n');
+          }
+
+          // Clean up duplicate blank lines
+          out = out.replace(/\n{3,}/g, '\n\n');
+          return out.trim();
+        };
+
+        if (messageEntry.contentPayload.header) messageEntry.contentPayload.header = replaceIn(messageEntry.contentPayload.header);
+        if (messageEntry.contentPayload.body) messageEntry.contentPayload.body = replaceIn(messageEntry.contentPayload.body);
+        if (messageEntry.contentPayload.footer) messageEntry.contentPayload.footer = replaceIn(messageEntry.contentPayload.footer);
+      }
+    } catch (e) {
+      console.warn('Could not replace placeholders for confirm message:', e?.message || e);
+    }
     const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
     const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v22.0';
