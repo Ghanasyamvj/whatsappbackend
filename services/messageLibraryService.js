@@ -227,8 +227,8 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Confirm Your Appointment ✅',
-          body: 'Appointment Details:\n👨‍⚕️ Dr. Sharma\n📅 Monday, Oct 14\n🕘 9:30 AM\n💰 Fee: ₹750\n\nWould you like to confirm and proceed to payment?',
-          footer: 'You can reschedule if needed',
+          body: 'Appointment Details:\n\n👨‍⚕️ Doctor: {{doctorName}}\n📅 Date: {{slotDate}}\n⏰ Time: {{slotTime}}\n💰 Fee: ₹750\n\nPlease confirm to complete your booking and proceed to payment.',
+          footer: 'Need to change your appointment? Use Reschedule',
           buttons: [
             {
               buttonId: 'btn_confirm_pay',
@@ -263,7 +263,7 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Payment Required 💳',
-          body: 'Please complete your payment to confirm the appointment:\n\n💰 Amount: ₹750\n🏥 Dr. Sharma Consultation\n📅 Monday, Oct 14, 9:30 AM\n\n[Payment Link: https://pay.hospital.com/abc123]',
+          body: 'Payment Details:\n\n💰 Amount: ₹750\n👨‍⚕️ Doctor: {{doctorName}}\n📅 Date: {{slotDate}}\n⏰ Time: {{slotTime}}\n\nPlease complete payment here: https://pay.hospital.com/abc123',
           footer: 'Secure payment powered by Razorpay',
           buttons: [
             {
@@ -299,7 +299,7 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Appointment Confirmed! 🎉',
-          body: 'Your appointment has been successfully booked:\n\n🎫 Token: GM-015\n👨‍⚕️ Dr. Sharma\n📅 Monday, Oct 14\n🕘 9:30 AM\n🏥 Room 201, 2nd Floor\n\nPlease arrive 15 minutes early.',
+          body: 'Booking Confirmed:\n\n🎫 Token: GM-015\n👨‍⚕️ Doctor: {{doctorName}}\n📅 Date: {{slotDate}}\n⏰ Time: {{slotTime}}\n🏥 Room 201, 2nd Floor\n\nPlease arrive 15 minutes before your appointment.',
           footer: 'Thank you for choosing our hospital',
           buttons: [
             {
