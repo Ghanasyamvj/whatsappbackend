@@ -92,7 +92,32 @@ class BookingService {
   // Pending booking helpers (used for interactive multi-step appointment flow)
   async createPendingBooking(userPhone, { patientId = null, doctorId = null, bookingTime = null, meta = {} } = {}) {
     try {
-      const payload = { userPhone, patientId, doctorId, bookingTime, meta, createdAt: new Date(), updatedAt: new Date() };
+      // Fetch existing pending to merge meta safely
+      let existing = null;
+      try {
+        const doc = await db.collection('pendingBookings').doc(userPhone).get();
+        if (doc && doc.exists) existing = doc.data();
+      } catch (e) {
+        // ignore read errors, we'll proceed with empty existing
+      }
+
+      const existingMeta = (existing && existing.meta) ? existing.meta : {};
+      const mergedMeta = Object.assign({}, existingMeta, meta || {});
+
+      // Normalize bookingTime: if it's a Date or ISO-parsable string, store as ISO string
+      let normalizedBookingTime = bookingTime;
+      try {
+        if (bookingTime instanceof Date) {
+          normalizedBookingTime = bookingTime.toISOString();
+        } else if (typeof bookingTime === 'string') {
+          const dt = new Date(bookingTime);
+          if (!isNaN(dt.getTime())) normalizedBookingTime = dt.toISOString();
+        }
+      } catch (e) {
+        // leave bookingTime as-is (likely a human label like 'Wed 4:00 PM')
+      }
+
+      const payload = { userPhone, patientId, doctorId, bookingTime: normalizedBookingTime, meta: mergedMeta, createdAt: new Date(), updatedAt: new Date() };
       await db.collection('pendingBookings').doc(userPhone).set(payload, { merge: true });
       return payload;
     } catch (error) {
