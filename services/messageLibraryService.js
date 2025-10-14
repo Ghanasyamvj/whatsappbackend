@@ -488,6 +488,16 @@ class MessageLibraryService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
+      {
+        triggerId: 'trigger_reschedule',
+        triggerType: 'button_click',
+        triggerValue: 'btn_reschedule',
+        nextAction: 'send_message',
+        targetId: 'msg_sharma_slots_interactive',
+        messageId: 'msg_sharma_slots_interactive',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
       // Back to Doctors button mapping - resend the doctor selection list
       {
         triggerId: 'trigger_back_doctors',
