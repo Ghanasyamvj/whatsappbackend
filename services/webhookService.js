@@ -379,7 +379,13 @@ async function handleInteractiveResponse(message) {
           // send slots message (best-effort)
           const slotsMsg = messageLibraryService.getMessageById('msg_sharma_slots_interactive');
           if (slotsMsg) {
-            try { await messageLibraryService.sendLibraryMessage(slotsMsg, message.from); } catch(e){ console.error('Failed to send slots message in fallback', e); }
+            try {
+              // clone and inject doctor's name into header
+              const msgToSend = JSON.parse(JSON.stringify(slotsMsg));
+              msgToSend.contentPayload = msgToSend.contentPayload || {};
+              msgToSend.contentPayload.header = doc.name || msgToSend.contentPayload.header;
+              await messageLibraryService.sendLibraryMessage(msgToSend, message.from);
+            } catch (e) { console.error('Failed to send slots message in fallback', e); }
           }
           // we handled it
           return;
@@ -488,10 +494,30 @@ async function handleInteractiveResponse(message) {
       console.log('🔔 Interactive trigger details:', { triggerId: trigger.triggerId, triggerType: trigger.triggerType, triggerValue: trigger.triggerValue, nextAction: trigger.nextAction, targetId: trigger.targetId });
       // If trigger asks to send a library message
         if (trigger.nextAction === 'send_message' && result.nextMessage) {
-        console.log(`📤 Sending next message: "${result.nextMessage.name}" to ${message.from}`);
         try {
-          await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
-          console.log(`✅ Successfully sent interactive response message to ${message.from}`);
+          // If this next message is the slots message, and the trigger is a list_selection (doctor), inject doctor's name into header
+          if (result.nextMessage && (result.nextMessage.messageId === 'msg_sharma_slots_interactive' || result.nextMessage.messageId === trigger.targetId)) {
+            let msgToSend = result.nextMessage;
+            if (trigger.triggerType === 'list_selection' && trigger.triggerValue) {
+              try {
+                const doc = await doctorService.getDoctorById(trigger.triggerValue).catch(() => null);
+                if (doc) {
+                  msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
+                  msgToSend.contentPayload = msgToSend.contentPayload || {};
+                  msgToSend.contentPayload.header = doc.name || msgToSend.contentPayload.header;
+                }
+              } catch (e) {
+                console.warn('Could not fetch doctor to inject header:', e?.message || e);
+              }
+            }
+            console.log(`📤 Sending next message: "${msgToSend.name}" to ${message.from}`);
+            await messageLibraryService.sendLibraryMessage(msgToSend, message.from);
+            console.log(`✅ Successfully sent interactive response message to ${message.from}`);
+          } else {
+            console.log(`📤 Sending next message: "${result.nextMessage.name}" to ${message.from}`);
+            await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+            console.log(`✅ Successfully sent interactive response message to ${message.from}`);
+          }
         } catch (error) {
           console.error(`❌ Failed to send interactive response message:`, error.message);
         }
@@ -571,7 +597,16 @@ async function handleInteractiveResponse(message) {
                 if (doctor) {
                   await bookingService.createPendingBooking(message.from, { doctorId: doctor.id, meta: { doctorName: doctor.name } });
                   // forward next message if present (slots)
-                  if (result.nextMessage) await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+                  if (result.nextMessage) {
+                    try {
+                      const msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
+                      msgToSend.contentPayload = msgToSend.contentPayload || {};
+                      msgToSend.contentPayload.header = doctor.name || msgToSend.contentPayload.header;
+                      await messageLibraryService.sendLibraryMessage(msgToSend, message.from);
+                    } catch (e) {
+                      console.error('Failed to forward slots message after creating pending booking:', e);
+                    }
+                  }
                   console.log('✅ Pending booking created for doctor selection:', doctor.id);
                   return;
                 }

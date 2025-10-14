@@ -133,13 +133,7 @@ class MessageLibraryService {
               nextAction: 'send_message',
               targetMessageId: 'msg_doctor_selection'
             },
-            {
-              buttonId: 'btn_specialist',
-              title: '🩺 Specialist',
-              triggerId: 'trigger_specialist',
-              nextAction: 'send_message',
-              targetMessageId: 'msg_specialist_selection'
-            },
+            // Specialist option removed per request
             {
               buttonId: 'btn_back_main',
               title: '⬅️ Back to Main',
@@ -191,7 +185,7 @@ class MessageLibraryService {
       },
       {
         messageId: 'msg_sharma_slots_interactive',
-        name: 'Dr. Sharma Slots - Interactive',
+        name: 'doctor selected',
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
@@ -481,6 +475,27 @@ class MessageLibraryService {
         nextAction: 'send_message',
         targetId: 'msg_confirm_appointment',
         messageId: 'msg_confirm_appointment',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        triggerId: 'trigger_slot_4pm',
+        triggerType: 'button_click',
+        triggerValue: 'btn_slot_4pm',
+        nextAction: 'send_message',
+        targetId: 'msg_confirm_appointment',
+        messageId: 'msg_confirm_appointment',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      // Back to Doctors button mapping - resend the doctor selection list
+      {
+        triggerId: 'trigger_back_doctors',
+        triggerType: 'button_click',
+        triggerValue: 'btn_back_doctors',
+        nextAction: 'send_message',
+        targetId: 'msg_doctor_selection',
+        messageId: 'msg_doctor_selection',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       },
