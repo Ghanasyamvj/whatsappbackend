@@ -2,6 +2,8 @@ const express = require('express');
 const { sendTextMessage } = require('../services/whatsappService');
 const messageLibraryService = require('../services/messageLibraryService');
 const flowService = require('../services/flowService');
+const bookingService = require('../services/bookingService');
+const patientService = require('../services/patientService');
 
 const router = express.Router();
 
@@ -216,6 +218,7 @@ router.post('/send-labtest', async (req, res) => {
       labTestName,
       notes 
     } = req.body;
+      const { atime } = req.body; // Added atime to the destructured request body
 
     // Validate required fields
     if (!phoneNumber || !patientName || !labTestName) {
@@ -251,14 +254,33 @@ router.post('/send-labtest', async (req, res) => {
 
     // Register personalized payment message & dynamic trigger for lab pay now (similar to medicine flow)
     try {
-      // Create a confirmation message for lab payments (scheduled/successful)
-      const confirmLabMsg = messageLibraryService.addMessage({
-        name: 'Lab Booking Confirmed',
-        type: 'interactive_button',
-        status: 'published',
-        contentPayload: {
+        // Ensure patient exists and create a booking first (if atime provided)
+        let booking = null;
+        try {
+          let patient = null;
+          if (patientId) {
+            patient = await patientService.getPatientById(patientId).catch(() => null);
+          }
+          if (!patient && phoneNumber) {
+            const digits = phoneNumber.replace(/\D/g, '');
+            const formattedPhoneForLookup = digits.length === 10 && !digits.startsWith('91') ? '91' + digits : digits;
+            patient = await patientService.getPatientByPhone(formattedPhoneForLookup).catch(() => null);
+          }
+          if (!patient) {
+            const created = await patientService.createPatient({ name: patientName || 'Unknown', phoneNumber: phoneNumber });
+            patient = created;
+          }
+          if (atime) {
+            booking = await bookingService.createBooking({ patientId: patient.id, bookingTime: atime, meta: { labTestName, notes } });
+          }
+        } catch (e) {
+          console.warn('Could not create booking or ensure patient exists for lab test:', e?.message || e);
+        }
+
+        // Build confirmation payload (use booking details when available)
+        const confirmLabPayload = {
           header: 'Lab Booking Confirmed ✅',
-          body: `Your lab test booking for ${labTestName} has been confirmed. Please proceed to the lab at the scheduled time.`,
+          body: booking ? `Your lab test booking for ${labTestName} is scheduled on ${new Date(booking.bookingTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}. Booking ID: ${booking.id || booking.bookingId}` : `Your lab test booking for ${labTestName} has been confirmed. Please proceed to the lab at the scheduled time.`,
           footer: 'Thank you for choosing our lab services',
           buttons: [
             {
@@ -269,14 +291,13 @@ router.post('/send-labtest', async (req, res) => {
               targetMessageId: 'msg_welcome_interactive'
             }
           ]
-        }
-      });
+        };
 
-  // Build personalized lab payment message with unique ids (timestamp + random suffix)
-  const tsLab = Date.now();
-  const rndLab = Math.random().toString(36).slice(2,6);
-  const confirmLabMsgId = `msg_order_lab_${tsLab}_${rndLab}`;
-  const payMsgLabId = `msg_payment_lab_${tsLab}_${rndLab}`;
+        // Build personalized lab payment message with unique ids (timestamp + random suffix)
+        const tsLab = Date.now();
+        const rndLab = Math.random().toString(36).slice(2,6);
+        const confirmLabMsgId = `msg_order_lab_${tsLab}_${rndLab}`;
+        const payMsgLabId = `msg_payment_lab_${tsLab}_${rndLab}`;
   const payNowLabButtonId = `btn_lab_pay_now_${tsLab}_${rndLab}`;
   const doneLabButtonId = `btn_payment_done_${tsLab}_${rndLab}`;
   const paymentPayloadLab = {
@@ -296,8 +317,23 @@ router.post('/send-labtest', async (req, res) => {
     }
   };
 
-  // Ensure confirmLabMsg has an explicit messageId
-  const confirmLabMsgEntry = messageLibraryService.addMessage({ messageId: confirmLabMsgId, name: 'Lab Booking Confirmed', type: 'interactive_button', status: 'published', contentPayload: confirmLabMsg.contentPayload });
+  // If we created a booking, add booking details into the interactive and payment payloads so the user sees schedule/booking id
+  if (typeof booking !== 'undefined' && booking) {
+    try {
+      const scheduledText = `\n\n🗓️ Scheduled: ${new Date(booking.bookingTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n🆔 Booking ID: ${booking.id || booking.bookingId}`;
+      if (interactiveLabPrescription && interactiveLabPrescription.contentPayload && typeof interactiveLabPrescription.contentPayload.body === 'string') {
+        interactiveLabPrescription.contentPayload.body = interactiveLabPrescription.contentPayload.body + scheduledText;
+      }
+      if (paymentPayloadLab && paymentPayloadLab.contentPayload && typeof paymentPayloadLab.contentPayload.body === 'string') {
+        paymentPayloadLab.contentPayload.body = paymentPayloadLab.contentPayload.body + scheduledText;
+      }
+    } catch (e) {
+      console.warn('Could not append booking details to messages:', e?.message || e);
+    }
+  }
+
+  // Ensure confirmLabPayload has an explicit messageId and add to library
+  const confirmLabMsgEntry = messageLibraryService.addMessage({ messageId: confirmLabMsgId, name: 'Lab Booking Confirmed', type: 'interactive_button', status: 'published', contentPayload: confirmLabPayload });
 
   const addedPaymentMsgLab = messageLibraryService.addMessage({ messageId: paymentPayloadLab.messageId, name: paymentPayloadLab.name, type: paymentPayloadLab.type, status: paymentPayloadLab.status, contentPayload: paymentPayloadLab.contentPayload });
 
