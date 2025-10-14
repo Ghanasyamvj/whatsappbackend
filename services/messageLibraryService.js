@@ -744,18 +744,67 @@ class MessageLibraryService {
       if (messageEntry && messageEntry.messageId === 'msg_confirm_appointment') {
         messageEntry.contentPayload = messageEntry.contentPayload || {};
         messageEntry.contentPayload.header = 'Confirm Your Appointment ✅';
-        // Attempt to inject selected doctor's name from pending booking for this recipient so the body shows correct doctor
+        // Attempt to inject selected doctor's name and slot/time from pending booking for this recipient
         try {
           const pending = await bookingService.getPendingBookingForUser(recipientPhone).catch(() => null);
           const doctorName = pending && pending.meta && pending.meta.doctorName ? pending.meta.doctorName : null;
-          if (doctorName && messageEntry.contentPayload.body) {
-            const bodyStr = String(messageEntry.contentPayload.body);
-            const replaced = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, doctorName);
-            messageEntry.contentPayload.body = replaced;
-            console.log('ℹ️ Injected doctorName into confirm body from pending booking:', doctorName);
+          const rawSlot = pending && pending.meta && pending.meta.slotTitle ? pending.meta.slotTitle : (pending && pending.bookingTime ? pending.bookingTime : null);
+
+          if (messageEntry.contentPayload.body) {
+            let bodyStr = String(messageEntry.contentPayload.body);
+
+            // Inject doctor name (replace first Dr. occurrence or doctor emoji line)
+            if (doctorName) {
+              if (/Dr\.?\s+[^\n\r]*/i.test(bodyStr)) {
+                bodyStr = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, doctorName);
+              } else {
+                bodyStr = bodyStr.replace(/(^.*👨‍⚕️.*$)/im, doctorName);
+              }
+            }
+
+            // Inject slot/time: prefer meta.slotTitle (human-friendly); if it contains a time, split date/time
+            if (rawSlot) {
+              const slotStr = String(rawSlot).replace(/^\s*[\p{Emoji}\s]*/u, '').trim();
+              // Extract a time like '9:30' or '4:00 PM'
+              const timeMatch = slotStr.match(/\b\d{1,2}:\d{2}\b(?:\s*(?:AM|PM|am|pm))?/);
+              const timePart = timeMatch ? timeMatch[0].trim() : null;
+              const datePart = timePart ? slotStr.replace(timePart, '').trim() : slotStr;
+
+              const lines = bodyStr.split(/\r?\n/);
+              let replacedTime = false;
+              let replacedDate = false;
+
+              for (let i = 0; i < lines.length; i++) {
+                const l = lines[i];
+                // Replace date line (contains calendar emoji or '📅' or a month name)
+                if (!replacedDate && /📅|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(l)) {
+                  lines[i] = datePart || slotStr;
+                  replacedDate = true;
+                  continue;
+                }
+
+                // Replace time line (emoji or time pattern)
+                if (!replacedTime && /🕘|🕐|\bAM\b|\bPM\b|\b\d{1,2}:\d{2}\b/i.test(l)) {
+                  lines[i] = timePart || slotStr;
+                  replacedTime = true;
+                  continue;
+                }
+              }
+
+              // If neither replaced, insert slotStr after the first non-empty line
+              if (!replacedDate && !replacedTime) {
+                const insertAt = Math.min(Math.max(1, 1), lines.length);
+                lines.splice(insertAt, 0, slotStr);
+              }
+
+              bodyStr = lines.join('\n');
+            }
+
+            messageEntry.contentPayload.body = bodyStr;
+            console.log('ℹ️ Injected pending booking info into confirm body', { doctorName: doctorName || null, slot: rawSlot || null });
           }
         } catch (e) {
-          console.warn('Could not inject doctorName into confirm body:', e?.message || e);
+          console.warn('Could not inject doctorName/slot into confirm body:', e?.message || e);
         }
       }
     } catch (e) {
