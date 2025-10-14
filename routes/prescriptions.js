@@ -296,25 +296,16 @@ router.post('/send-labtest', async (req, res) => {
   // Insert schedule info into messages based on provided atime (no persistence)
   if (atime) {
     try {
-      const scheduledText = `\n\n🗓️ Scheduled: ${new Date(atime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
+  let scheduledText = `\n\n🗓️ Scheduled: ${new Date(atime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
+  // truncate scheduled text to 200 chars just in case
+  if (scheduledText.length > 200) scheduledText = scheduledText.slice(0, 200);
       if (interactiveLabPrescription && interactiveLabPrescription.contentPayload && typeof interactiveLabPrescription.contentPayload.body === 'string') {
         interactiveLabPrescription.contentPayload.body = interactiveLabPrescription.contentPayload.body + scheduledText;
       }
       if (paymentPayloadLab && paymentPayloadLab.contentPayload && typeof paymentPayloadLab.contentPayload.body === 'string') {
         paymentPayloadLab.contentPayload.body = paymentPayloadLab.contentPayload.body + scheduledText;
       }
-      // Also add compact scheduled text in footer for visibility
-      const scheduledCompact = `Scheduled: ${new Date(atime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
-      try {
-        if (interactiveLabPrescription && interactiveLabPrescription.contentPayload) {
-          interactiveLabPrescription.contentPayload.footer = (interactiveLabPrescription.contentPayload.footer || '') + '\n' + scheduledCompact;
-        }
-        if (paymentPayloadLab && paymentPayloadLab.contentPayload) {
-          paymentPayloadLab.contentPayload.footer = (paymentPayloadLab.contentPayload.footer || '') + '\n' + scheduledCompact;
-        }
-      } catch (e) {
-        console.warn('Could not append compact scheduled info to footer/header:', e?.message || e);
-      }
+      // Note: do not add scheduled info to footer to avoid WhatsApp footer length limits
     } catch (e) {
       console.warn('Could not append scheduled details to messages:', e?.message || e);
     }
