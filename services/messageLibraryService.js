@@ -767,12 +767,19 @@ class MessageLibraryService {
       if (messageEntry && messageEntry.contentPayload && messageEntry.contentPayload.header && messageEntry.contentPayload.body) {
         const nameHeader = String(messageEntry.contentPayload.header).trim();
         const bodyStr = String(messageEntry.contentPayload.body);
-          // Only perform replacement when header itself appears to be a doctor's name (contains 'Dr')
+          // Only perform replacement when header itself appears to contain a doctor's name (contains 'Dr')
           if (nameHeader && /Dr\.?\s*/i.test(nameHeader) && /Dr\.?\s+[^\n\r]*/i.test(bodyStr)) {
           try {
-            const replaced = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, nameHeader);
+            // If header contains extra suffix (e.g., 'Dr. X - Available Slots 📅'), extract only the doctor portion
+            let doctorOnly = nameHeader;
+            if (doctorOnly.includes(' - ')) {
+              doctorOnly = doctorOnly.split(' - ')[0].trim();
+            } else if (doctorOnly.includes('\n')) {
+              doctorOnly = doctorOnly.split('\n')[0].trim();
+            }
+            const replaced = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, doctorOnly);
             messageEntry.contentPayload.body = replaced;
-            console.log('ℹ️ Confirm body doctor name replaced with header:', nameHeader);
+            console.log('ℹ️ Confirm body doctor name replaced with header (doctor-only):', doctorOnly);
           } catch (e) {
             console.warn('Could not replace doctor name in confirm body:', e?.message || e);
           }
