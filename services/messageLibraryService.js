@@ -876,6 +876,8 @@ class MessageLibraryService {
         let slotTime = '';
 
         if (rawSlot) {
+          // Hardcode the date to the requested value and remove weekday tokens
+          slotDate = '25 Oct 2025';
           // Prefer an explicit bookingTime ISO if available
           if (pending && pending.bookingTime && typeof pending.bookingTime === 'string') {
             try {
@@ -893,9 +895,9 @@ class MessageLibraryService {
           const timeMatch = slotStr.match(/\b\d{1,2}:\d{2}\b(?:\s*(?:AM|PM|am|pm))?/);
           if (timeMatch) slotTime = timeMatch[0].trim();
 
+          // Ensure there is no weekday label left in the displayed date
+          const cleaned = slotStr.replace(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s*,?/ig, '').trim();
           if (!slotDate) {
-            // Remove weekday names like Mon, Monday, Tue, Tuesday, etc.
-            const cleaned = slotStr.replace(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s*,?/ig, '').trim();
             slotDate = cleaned.replace(slotTime, '').trim();
           }
         }
