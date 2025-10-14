@@ -113,6 +113,21 @@ router.post('/send', async (req, res) => {
       // Add the personalized payment message to the in-memory message library so it can be sent on trigger
       const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
 
+      // Create an intermediate "Payment Received" message (processing) which will be
+      // shown immediately after the user clicks Payment Completed. From there the
+      // user can proceed to the final Order Placed message via a dedicated button.
+      const confirmProcessingMsg = messageLibraryService.addMessage({
+        name: 'Payment Received - Processing',
+        type: 'interactive_button',
+        status: 'published',
+        contentPayload: {
+          header: 'Payment Received ✅',
+          body: `We received your payment for ${medicineName}. We are processing your order now.`,
+          footer: 'Processing your order',
+          buttons: []
+        }
+      });
+
       // Register dynamic trigger so clicking the Pay Now button on the prescription
       // sends the personalized payment message we just added. Use a unique Pay Now button id
       // to avoid colliding with global/static triggers.
@@ -128,11 +143,51 @@ router.post('/send', async (req, res) => {
       };
 
       // Register dynamic trigger so clicking the unique payment-done button in the personalized
-      // payment message maps to the order confirmation message.
+      // payment message maps to the intermediate processing message. The processing message
+      // will have a "Proceed" button which will map to the final Order Placed message.
       const dynamicTriggerDone = {
         triggerId: `trigger_payment_done_${ts}`,
         triggerType: 'button_click',
         triggerValue: doneButtonId,
+        nextAction: 'send_message',
+        targetId: confirmProcessingMsg.messageId,
+        messageId: confirmProcessingMsg.messageId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Add a dedicated Proceed button on the processing message which maps to the final confirmation
+      const proceedButtonId = `btn_proceed_order_${ts}`;
+      const proceedTriggerId = `trigger_proceed_order_${ts}`;
+      // mutate the processing message contentPayload to add the proceed button
+      try {
+        if (confirmProcessingMsg && confirmProcessingMsg.contentPayload) {
+          confirmProcessingMsg.contentPayload.buttons = [
+            {
+              buttonId: proceedButtonId,
+              title: '➡️ Proceed to Order',
+              triggerId: proceedTriggerId,
+              nextAction: 'send_message',
+              targetMessageId: confirmMedicineMsg.messageId
+            },
+            {
+              buttonId: 'btn_main_menu',
+              title: '🏠 Main Menu',
+              triggerId: 'trigger_main_menu',
+              nextAction: 'send_message',
+              targetMessageId: 'msg_welcome_interactive'
+            }
+          ];
+        }
+      } catch (e) {
+        console.warn('Could not add proceed button to processing message:', e?.message || e);
+      }
+
+      // Register the proceed trigger that maps the proceed button to the final confirmation
+      const dynamicTriggerProceed = {
+        triggerId: proceedTriggerId,
+        triggerType: 'button_click',
+        triggerValue: proceedButtonId,
         nextAction: 'send_message',
         targetId: confirmMedicineMsg.messageId,
         messageId: confirmMedicineMsg.messageId,
@@ -153,6 +208,7 @@ router.post('/send', async (req, res) => {
       }
 
       // Unshift both triggers so they take precedence over global/default triggers.
+      messageLibraryService.triggers.unshift(dynamicTriggerProceed);
       messageLibraryService.triggers.unshift(dynamicTriggerDone);
       messageLibraryService.triggers.unshift(dynamicTriggerPayNow);
     } catch (err) {

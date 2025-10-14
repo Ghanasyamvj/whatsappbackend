@@ -777,9 +777,10 @@ async function handleInteractiveResponse(message) {
         return;
       }
 
-      // Handle Payment Completed button: finalize booking
-      // Support dynamic payment-done triggers/button ids that include timestamps
-      if (trigger.triggerId === 'trigger_payment_done' || trigger.triggerValue === 'btn_payment_done' || (trigger.triggerId && trigger.triggerId.startsWith && trigger.triggerId.startsWith('trigger_payment_done_')) || (trigger.triggerValue && trigger.triggerValue.startsWith && trigger.triggerValue.startsWith('btn_payment_done_'))) {
+      // Handle Proceed button after payment processing: finalize booking
+      // We intentionally do NOT finalize on raw payment-done button clicks to avoid collisions.
+      // Finalization occurs only when a dedicated 'proceed' button is clicked.
+      if ((trigger.triggerId && trigger.triggerId.startsWith && trigger.triggerId.startsWith('trigger_proceed_')) || (trigger.triggerValue && trigger.triggerValue.startsWith && trigger.triggerValue.startsWith('btn_proceed_'))) {
         try {
           const pending = await bookingService.getPendingBookingForUser(message.from);
           if (!pending) {
@@ -800,7 +801,7 @@ async function handleInteractiveResponse(message) {
           await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: `✅ Your appointment is confirmed. Booking ID: ${booking.id}` } }, message.from);
           await flowService.createMessageWithFlow({ userPhone: message.from, messageType: 'text', content: `Appointment created: ${booking.id}`, patientId: patient.id, doctorId: booking.doctorId, bookingId: booking.id, isResponse: false });
         } catch (err) {
-          console.error('Error finalizing booking after payment:', err);
+          console.error('Error finalizing booking after proceed:', err);
           await messageLibraryService.sendLibraryMessage({ type: 'standard_text', contentPayload: { body: 'We could not finalize your booking. Please contact reception.' } }, message.from);
         }
         return;
