@@ -44,8 +44,8 @@ router.post('/send', async (req, res) => {
       status: 'published',
       contentPayload: {
         header: '🏥 Prescription Details',
-        body: `*Patient:* ${patientName}\n*Medicine:* ${medicineName}\n*Dosage:* ${dosage}\n*Frequency:* ${frequency}\n*Duration:* ${duration}\n\n_Prescribed on: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_`,
-        footer: 'Tap Pay Now to complete payment or Pay Later to return to home',
+  body: `🩺 *Patient:* ${patientName}\n🆔 *Patient ID:* ${patientId || 'N/A'}\n\n💊 *Medicine:* ${medicineName}\n📋 *Dosage:* ${dosage}\n⏰ *Frequency:* ${frequency}\n📅 *Duration:* ${duration}\n\n⚠️ *Important Instructions:*\n• Take medicine as prescribed\n• Complete the full course\n• Contact doctor if you experience any side effects\n\n_Prescribed on: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_`,
+  footer: 'For any queries, please contact your healthcare provider.',
         buttons: [
           {
             buttonId: 'btn_prescription_pay_now',
