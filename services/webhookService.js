@@ -191,7 +191,7 @@ async function handleIncomingMessage(message) {
             }
           } else {
             // Start the registration flow instead of sending the static form text
-            const registrationFlowId = '1366099374850695';
+            const registrationFlowId = '737535792667128';
             console.log('ℹ️ No patient found for phone, starting registration flow:', registrationFlowId);
             const flowToken = `flow_token_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
             try {

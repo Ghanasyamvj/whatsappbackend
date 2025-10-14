@@ -8,7 +8,7 @@ const flowService = require('../services/flowService');
 async function main() {
   try {
     const testPhone = '+15551110001'; // seeded patient phone
-    const testFlowId = '1366099374850695';
+  const testFlowId = '737535792667128';
     const flowToken = `flow_token_test_${Date.now()}`;
 
     console.log('Creating flow tracking for test...');

@@ -90,7 +90,7 @@ class MessageLibraryService {
         type: 'standard_text',
         status: 'published',
         contentPayload: {
-          body: 'To register as a new patient please fill this form. Form ID: 1366099374850695'
+          body: 'To register as a new patient please fill this form. Form ID: 737535792667128'
         },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -548,7 +548,7 @@ class MessageLibraryService {
         // Start the WhatsApp Flow when user chooses New Patient
         nextAction: 'start_flow',
         // Use the flow id you requested
-        targetId: '1366099374850695',
+  targetId: '737535792667128',
         messageId: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -718,10 +718,10 @@ class MessageLibraryService {
   // Get button information from a message
   getMessageButtons(messageId) {
     const message = this.getMessageById(messageId);
-    if (!message || !message.contentPayload.buttons) {
+    if (!message || !message.contentPayload || !message.contentPayload.buttons) {
       return [];
     }
-    
+
     return message.contentPayload.buttons.map(button => ({
       buttonId: button.buttonId,
       title: button.title,
@@ -729,30 +729,6 @@ class MessageLibraryService {
       nextAction: button.nextAction,
       targetMessageId: button.targetMessageId
     }));
-  }
-
-  // Get list options from a message
-  getMessageListOptions(messageId) {
-    const message = this.getMessageById(messageId);
-    if (!message || !message.contentPayload.sections) {
-      return [];
-    }
-    
-    const options = [];
-    message.contentPayload.sections.forEach(section => {
-      section.rows.forEach(row => {
-        options.push({
-          rowId: row.rowId,
-          title: row.title,
-          description: row.description,
-          triggerId: row.triggerId,
-          nextAction: row.nextAction,
-          targetMessageId: row.targetMessageId
-        });
-      });
-    });
-    
-    return options;
   }
 
   // Send message using WhatsApp API
