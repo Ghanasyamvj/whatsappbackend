@@ -190,7 +190,7 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: '{{doctorName}} - Available Slots 📅',
+          header: 'Dr. Sharma - Available Slots 📅',
           body: 'Please select your preferred time slot:',
           footer: 'Consultation fee: ₹750',
           buttons: [
@@ -227,7 +227,7 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Confirm Your Appointment ✅',
-          body: 'Appointment Details:\n👨‍⚕️ {{doctorName}}\n📅 {{slotDate}}\n🕘 {{slotTime}}\n💰 Fee: ₹750\n\nWould you like to confirm and proceed to payment?',
+          body: 'Appointment Details:\n👨‍⚕️ Dr. Sharma\n📅 Monday, Oct 14\n🕘 9:30 AM\n💰 Fee: ₹750\n\nWould you like to confirm and proceed to payment?',
           footer: 'You can reschedule if needed',
           buttons: [
             {
@@ -263,7 +263,7 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Payment Required 💳',
-          body: 'Please complete your payment to confirm the appointment:\n\n💰 Amount: ₹750\n🏥 {{doctorName}} Consultation\n📅 {{slotDate}} {{slotTime}}\n\n[Payment Link: https://pay.hospital.com/abc123]',
+          body: 'Please complete your payment to confirm the appointment:\n\n💰 Amount: ₹750\n🏥 Dr. Sharma Consultation\n📅 Monday, Oct 14, 9:30 AM\n\n[Payment Link: https://pay.hospital.com/abc123]',
           footer: 'Secure payment powered by Razorpay',
           buttons: [
             {
@@ -299,7 +299,7 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Appointment Confirmed! 🎉',
-          body: 'Your appointment has been successfully booked:\n\n🎫 Token: GM-015\n👨‍⚕️ {{doctorName}}\n📅 {{slotDate}}\n🕘 {{slotTime}}\n🏥 Room 201, 2nd Floor\n\nPlease arrive 15 minutes early.',
+          body: 'Your appointment has been successfully booked:\n\n🎫 Token: GM-015\n👨‍⚕️ Dr. Sharma\n📅 Monday, Oct 14\n🕘 9:30 AM\n🏥 Room 201, 2nd Floor\n\nPlease arrive 15 minutes early.',
           footer: 'Thank you for choosing our hospital',
           buttons: [
             {
@@ -812,52 +812,25 @@ class MessageLibraryService {
     }
     // If this is a confirm-appointment style message and header is set, ensure the body reflects the header
     try {
-      if (messageEntry && messageEntry.contentPayload) {
-        // Try to replace placeholders {{doctorName}}, {{slotDate}}, {{slotTime}} using pending booking
-        try {
-          const pending = await bookingService.getPendingBookingForUser(recipientPhone).catch(() => null);
-          const doctorName = pending && pending.meta && pending.meta.doctorName ? pending.meta.doctorName : null;
-          const rawSlot = pending && pending.meta && pending.meta.slotTitle ? pending.meta.slotTitle : (pending && pending.bookingTime ? pending.bookingTime : null);
-          let slotDate = '';
-          let slotTime = '';
-          if (rawSlot) {
-            // If bookingTime is an ISO timestamp (set by booking flow), prefer that for deterministic date
-            if (pending && pending.bookingTime && typeof pending.bookingTime === 'string') {
-              try {
-                const dt = new Date(pending.bookingTime);
-                if (!isNaN(dt.getTime())) {
-                  // Format as 'D Mon YYYY' e.g., '15 Oct 2025'
-                  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                  slotDate = `${dt.getDate()} ${monthNames[dt.getMonth()]} ${dt.getFullYear()}`;
-                }
-              } catch (e) {
-                // fallback to label parsing below
-              }
+      if (messageEntry && messageEntry.contentPayload && messageEntry.contentPayload.header && messageEntry.contentPayload.body) {
+        const nameHeader = String(messageEntry.contentPayload.header).trim();
+        const bodyStr = String(messageEntry.contentPayload.body);
+          // Only perform replacement when header itself appears to contain a doctor's name (contains 'Dr')
+          if (nameHeader && /Dr\.?\s*/i.test(nameHeader) && /Dr\.?\s+[^\n\r]*/i.test(bodyStr)) {
+          try {
+            // If header contains extra suffix (e.g., 'Dr. X - Available Slots 📅'), extract only the doctor portion
+            let doctorOnly = nameHeader;
+            if (doctorOnly.includes(' - ')) {
+              doctorOnly = doctorOnly.split(' - ')[0].trim();
+            } else if (doctorOnly.includes('\n')) {
+              doctorOnly = doctorOnly.split('\n')[0].trim();
             }
-
-            const slotStr = String(rawSlot).replace(/^\s*[\p{Emoji}\s]*/u, '').trim();
-            const timeMatch = slotStr.match(/\b\d{1,2}:\d{2}\b(?:\s*(?:AM|PM|am|pm))?/);
-            if (timeMatch) slotTime = timeMatch[0].trim();
-
-            // If we couldn't derive slotDate from bookingTime, strip weekday names from label
-            if (!slotDate) {
-              // remove weekday short and long names like Mon, Monday, Tue, Tuesday, etc.
-              const cleaned = slotStr.replace(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s*,?/ig, '').trim();
-              // also remove any leading day words like 'Mon' or symbols
-              slotDate = cleaned.replace(slotTime, '').trim();
-            }
+            const replaced = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, doctorOnly);
+            messageEntry.contentPayload.body = replaced;
+            console.log('ℹ️ Confirm body doctor name replaced with header (doctor-only):', doctorOnly);
+          } catch (e) {
+            console.warn('Could not replace doctor name in confirm body:', e?.message || e);
           }
-
-          const replaceIn = (s) => String(s || '')
-            .replace(/\{\{doctorName\}\}/g, doctorName || 'Doctor')
-            .replace(/\{\{slotDate\}\}/g, slotDate || '')
-            .replace(/\{\{slotTime\}\}/g, slotTime || '');
-
-          if (messageEntry.contentPayload.header) messageEntry.contentPayload.header = replaceIn(messageEntry.contentPayload.header);
-          if (messageEntry.contentPayload.body) messageEntry.contentPayload.body = replaceIn(messageEntry.contentPayload.body);
-          if (messageEntry.contentPayload.footer) messageEntry.contentPayload.footer = replaceIn(messageEntry.contentPayload.footer);
-        } catch (e) {
-          console.warn('Could not replace placeholders for confirm message:', e?.message || e);
         }
       }
     } catch (e) {
