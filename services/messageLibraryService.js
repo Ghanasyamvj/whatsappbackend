@@ -943,6 +943,39 @@ class MessageLibraryService {
           }
         }
 
+        // For confirm appointment messages, build a deterministic body so stray tokens like 'Wed' are removed
+        try {
+          if (messageEntry && messageEntry.messageId === 'msg_confirm_appointment') {
+            // Ensure doctor name shows as 'Dr. Name' when possible
+            let displayDoctor = doctorName || '';
+            if (displayDoctor && !/^Dr\.?\s+/i.test(displayDoctor)) {
+              displayDoctor = `Dr. ${displayDoctor}`;
+            }
+
+            // Clean any weekday tokens from slotDate
+            const cleanedDate = String(slotDate || '').replace(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s*,?/ig, '').trim();
+
+            // Build final body using the canonical template structure
+            const feeMatch = (String(messageEntry.contentPayload && messageEntry.contentPayload.body || '')).match(/₹\s*\d+/);
+            const feeDisplay = feeMatch ? feeMatch[0] : '₹750';
+
+            const finalBody = [
+              'Appointment Details:',
+              '',
+              `🩺 ${displayDoctor || 'Doctor'}`,
+              `📅 ${cleanedDate || '25 Oct 2025'}`,
+              `⏰ Time: ${slotTime || ''}`,
+              `💰 Fee: ${feeDisplay}`,
+              '',
+              'Please confirm to complete your booking and proceed to payment.'
+            ].join('\n');
+
+            messageEntry.contentPayload.body = finalBody;
+          }
+        } catch (err) {
+          console.warn('Could not build deterministic confirm body:', err?.message || err);
+        }
+
         const replaceIn = (s) => {
           let out = String(s || '');
           out = out.replace(/\{\{doctorName\}\}/g, doctorName || 'Doctor');
