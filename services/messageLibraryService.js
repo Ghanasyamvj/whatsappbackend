@@ -762,6 +762,25 @@ class MessageLibraryService {
     } catch (err) {
       console.error('Error enriching messageEntry with dynamic data:', err);
     }
+    // If this is a confirm-appointment style message and header is set, ensure the body reflects the header
+    try {
+      if (messageEntry && messageEntry.contentPayload && messageEntry.contentPayload.header && messageEntry.contentPayload.body) {
+        const nameHeader = String(messageEntry.contentPayload.header).trim();
+        const bodyStr = String(messageEntry.contentPayload.body);
+        // If body contains a 'Dr. <name>' pattern, replace the first occurrence with header value
+        if (nameHeader && /Dr\.?\s+[^\n\r]*/i.test(bodyStr)) {
+          try {
+            const replaced = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, nameHeader);
+            messageEntry.contentPayload.body = replaced;
+            console.log('ℹ️ Confirm body doctor name replaced with header:', nameHeader);
+          } catch (e) {
+            console.warn('Could not replace doctor name in confirm body:', e?.message || e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error during confirm-body injection:', e?.message || e);
+    }
     const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
     const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v22.0';
@@ -878,6 +897,26 @@ class MessageLibraryService {
         console.log('📦 WhatsApp API payload preview:', preview);
       } catch (e) {
         console.warn('Could not log WhatsApp payload preview:', e?.message || e);
+      }
+
+      // Final safety: if this is an interactive payload and header/body mismatch exists,
+      // prefer the header as the source-of-truth and replace the first 'Dr. <name>' occurrence in the body.
+      try {
+        if (messagePayload && messagePayload.type === 'interactive' && messagePayload.interactive) {
+          const headerText = messagePayload.interactive.header?.text || (messageEntry && messageEntry.contentPayload && messageEntry.contentPayload.header) || null;
+          const bodyText = messagePayload.interactive.body && (typeof messagePayload.interactive.body === 'object' ? messagePayload.interactive.body.text : messagePayload.interactive.body);
+          if (headerText && bodyText && /Dr\.?\s+/i.test(bodyText)) {
+            const replacedBody = String(bodyText).replace(/Dr\.?\s+[^\n\r]*/i, String(headerText));
+            if (messagePayload.interactive.body && typeof messagePayload.interactive.body === 'object') {
+              messagePayload.interactive.body.text = replacedBody;
+            } else {
+              messagePayload.interactive.body = replacedBody;
+            }
+            console.log('🔧 Normalized interactive body to match header before send:', { header: headerText });
+          }
+        }
+      } catch (e) {
+        console.warn('Could not normalize interactive body to header:', e?.message || e);
       }
 
       const response = await axios.post(apiUrl, messagePayload, {
