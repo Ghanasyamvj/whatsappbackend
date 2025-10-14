@@ -65,6 +65,47 @@ router.post('/send', async (req, res) => {
       }
     };
 
+    // Create a personalized payment message and register a dynamic trigger so
+    // when the user clicks Pay Now they see the payment link WITH the prescription summary.
+    try {
+      const paymentPayload = {
+        messageId: `msg_payment_pres_${Date.now()}`,
+        name: 'Payment Required - Prescription',
+        type: 'interactive_button',
+        status: 'published',
+        contentPayload: {
+          header: '💳 Payment Required',
+          body: `Please complete your payment to confirm the prescription:\n\n💊 ${medicineName} - ${dosage} (${frequency})\n📅 Duration: ${duration} days\n\n[Payment Link: https://pay.hospital.com/abc123]`,
+          footer: 'Secure payment powered by Razorpay',
+          buttons: [
+            { buttonId: 'btn_payment_done', title: '✅ Payment Completed', triggerId: 'trigger_payment_done', nextAction: 'send_message', targetMessageId: 'msg_appointment_confirmed' },
+            { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' },
+            { buttonId: 'btn_cancel_payment', title: '❌ Cancel', triggerId: 'trigger_cancel_payment', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
+          ]
+        }
+      };
+
+      // Add the personalized payment message to the in-memory message library so it can be sent on trigger
+      const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
+
+      // Register a dynamic trigger that will take precedence for this Pay Now button
+      const dynamicTrigger = {
+        triggerId: `trigger_pres_pay_now_${Date.now()}`,
+        triggerType: 'button_click',
+        triggerValue: 'btn_prescription_pay_now',
+        nextAction: 'send_message',
+        targetId: addedPaymentMsg.messageId,
+        messageId: addedPaymentMsg.messageId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Put at front so it takes precedence over global prescription trigger
+      messageLibraryService.triggers.unshift(dynamicTrigger);
+    } catch (err) {
+      console.error('Failed to register personalized payment message/trigger:', err);
+    }
+
     console.log(`📤 Sending interactive prescription to ${formattedPhone} for patient ${patientName}`);
 
     try {
