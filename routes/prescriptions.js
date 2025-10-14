@@ -327,6 +327,18 @@ router.post('/send-labtest', async (req, res) => {
       if (paymentPayloadLab && paymentPayloadLab.contentPayload && typeof paymentPayloadLab.contentPayload.body === 'string') {
         paymentPayloadLab.contentPayload.body = paymentPayloadLab.contentPayload.body + scheduledText;
       }
+      // Also add a compact scheduled string in footer/header for visibility
+      const scheduledCompact = `Scheduled: ${new Date(booking.bookingTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} | Booking: ${booking.id || booking.bookingId}`;
+      try {
+        if (interactiveLabPrescription && interactiveLabPrescription.contentPayload) {
+          interactiveLabPrescription.contentPayload.footer = (interactiveLabPrescription.contentPayload.footer || '') + '\n' + scheduledCompact;
+        }
+        if (paymentPayloadLab && paymentPayloadLab.contentPayload) {
+          paymentPayloadLab.contentPayload.footer = (paymentPayloadLab.contentPayload.footer || '') + '\n' + scheduledCompact;
+        }
+      } catch (e) {
+        console.warn('Could not append compact booking info to footer/header:', e?.message || e);
+      }
     } catch (e) {
       console.warn('Could not append booking details to messages:', e?.message || e);
     }
@@ -378,11 +390,20 @@ router.post('/send-labtest', async (req, res) => {
     }
 
     console.log(`📤 Sending interactive lab prescription to ${formattedPhone} for patient ${patientName}`);
+    // Diagnostic logs: show atime and booking details and payloads
+    try {
+      console.log('ℹ️ send-labtest - received atime:', atime);
+      console.log('ℹ️ send-labtest - booking (if created):', booking);
+      console.log('ℹ️ send-labtest - interactive body preview:', interactiveLabPrescription?.contentPayload?.body?.slice(0, 400));
+      console.log('ℹ️ send-labtest - payment body preview:', paymentPayloadLab?.contentPayload?.body?.slice(0, 400));
+    } catch (e) {
+      console.warn('Could not log diagnostic details for send-labtest:', e?.message || e);
+    }
 
     try {
       const result = await messageLibraryService.sendLibraryMessage(interactiveLabPrescription, formattedPhone);
-      console.log('✅ Interactive lab prescription sent successfully:', result);
-      res.json({ success: true, data: { messageId: result.messageId, phoneNumber: formattedPhone, patientName, labTestName, timestamp: result.timestamp }, message: 'Lab test prescription sent successfully via WhatsApp' });
+  console.log('✅ Interactive lab prescription sent successfully:', result);
+  res.json({ success: true, data: { messageId: result.messageId, phoneNumber: formattedPhone, patientName, labTestName, timestamp: result.timestamp, booking: booking || null }, message: 'Lab test prescription sent successfully via WhatsApp' });
     } catch (err) {
       console.error('❌ Failed to send interactive lab prescription via WhatsApp:', err?.message || err);
       try {

@@ -839,6 +839,15 @@ class MessageLibraryService {
         to: recipientPhone,
         messageId: messageEntry.messageId
       });
+      // Detailed payload preview for debugging (avoid logging sensitive tokens)
+      try {
+        const preview = { ...messagePayload };
+        if (preview.interactive && preview.interactive.body) preview.interactive.body = String(preview.interactive.body).slice(0, 800);
+        if (preview.text && preview.text.body) preview.text.body = String(preview.text.body).slice(0, 800);
+        console.log('📦 WhatsApp API payload preview:', preview);
+      } catch (e) {
+        console.warn('Could not log WhatsApp payload preview:', e?.message || e);
+      }
 
       const response = await axios.post(apiUrl, messagePayload, {
         headers: {
