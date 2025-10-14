@@ -68,8 +68,32 @@ router.post('/send', async (req, res) => {
     // Create a personalized payment message and register a dynamic trigger so
     // when the user clicks Pay Now they see the payment link WITH the prescription summary.
     try {
+      // Create a confirmation message for this prescription payment (Order placed -> proceed to pharmacy)
+      const confirmMedicineMsg = messageLibraryService.addMessage({
+        name: 'Order Placed - Prescription',
+        type: 'interactive_button',
+        status: 'published',
+        contentPayload: {
+          header: 'Order Placed Successfully 🛒',
+          body: `Your order has been placed successfully. Please proceed to the pharmacy to collect your medicines for ${medicineName}.`,
+          footer: 'Collect medicines at the pharmacy counter',
+          buttons: [
+            {
+              buttonId: 'btn_main_menu',
+              title: '🏠 Main Menu',
+              triggerId: 'trigger_main_menu',
+              nextAction: 'send_message',
+              targetMessageId: 'msg_welcome_interactive'
+            }
+          ]
+        }
+      });
+
+      // Build personalized payment message with a unique 'payment done' button id so it maps to the confirmation above
+      const ts = Date.now();
+      const doneButtonId = `btn_payment_done_${ts}`;
       const paymentPayload = {
-        messageId: `msg_payment_pres_${Date.now()}`,
+        messageId: `msg_payment_pres_${ts}`,
         name: 'Payment Required - Prescription',
         type: 'interactive_button',
         status: 'published',
@@ -78,7 +102,7 @@ router.post('/send', async (req, res) => {
           body: `Please complete your payment to confirm the prescription:\n\n💊 ${medicineName} - ${dosage} (${frequency})\n📅 Duration: ${duration} days\n\n[Payment Link: https://pay.hospital.com/abc123]`,
           footer: 'Secure payment powered by Razorpay',
           buttons: [
-            { buttonId: 'btn_payment_done', title: '✅ Payment Completed', triggerId: 'trigger_payment_done', nextAction: 'send_message', targetMessageId: 'msg_appointment_confirmed' },
+            { buttonId: doneButtonId, title: '✅ Payment Completed', triggerId: `trigger_payment_done_${ts}`, nextAction: 'send_message', targetMessageId: confirmMedicineMsg.messageId },
             { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' },
             { buttonId: 'btn_cancel_payment', title: '❌ Cancel', triggerId: 'trigger_cancel_payment', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
           ]
@@ -88,9 +112,10 @@ router.post('/send', async (req, res) => {
       // Add the personalized payment message to the in-memory message library so it can be sent on trigger
       const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
 
-      // Register a dynamic trigger that will take precedence for this Pay Now button
-      const dynamicTrigger = {
-        triggerId: `trigger_pres_pay_now_${Date.now()}`,
+      // Register dynamic trigger so clicking the original 'Pay Now' on the prescription
+      // sends the personalized payment message we just added.
+      const dynamicTriggerPayNow = {
+        triggerId: `trigger_pres_pay_now_${ts}`,
         triggerType: 'button_click',
         triggerValue: 'btn_prescription_pay_now',
         nextAction: 'send_message',
@@ -100,8 +125,22 @@ router.post('/send', async (req, res) => {
         updatedAt: new Date().toISOString()
       };
 
-      // Put at front so it takes precedence over global prescription trigger
-      messageLibraryService.triggers.unshift(dynamicTrigger);
+      // Register dynamic trigger so clicking the unique payment-done button in the personalized
+      // payment message maps to the order confirmation message.
+      const dynamicTriggerDone = {
+        triggerId: `trigger_payment_done_${ts}`,
+        triggerType: 'button_click',
+        triggerValue: doneButtonId,
+        nextAction: 'send_message',
+        targetId: confirmMedicineMsg.messageId,
+        messageId: confirmMedicineMsg.messageId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Unshift both triggers so they take precedence over global/default triggers.
+      messageLibraryService.triggers.unshift(dynamicTriggerDone);
+      messageLibraryService.triggers.unshift(dynamicTriggerPayNow);
     } catch (err) {
       console.error('Failed to register personalized payment message/trigger:', err);
     }
@@ -191,8 +230,32 @@ router.post('/send-labtest', async (req, res) => {
 
     // Register personalized payment message & dynamic trigger for lab pay now (similar to medicine flow)
     try {
+      // Create a confirmation message for lab payments (scheduled/successful)
+      const confirmLabMsg = messageLibraryService.addMessage({
+        name: 'Lab Booking Confirmed',
+        type: 'interactive_button',
+        status: 'published',
+        contentPayload: {
+          header: 'Lab Booking Confirmed ✅',
+          body: `Your lab test booking for ${labTestName} has been confirmed. Please proceed to the lab at the scheduled time.`,
+          footer: 'Thank you for choosing our lab services',
+          buttons: [
+            {
+              buttonId: 'btn_main_menu',
+              title: '🏠 Main Menu',
+              triggerId: 'trigger_main_menu',
+              nextAction: 'send_message',
+              targetMessageId: 'msg_welcome_interactive'
+            }
+          ]
+        }
+      });
+
+      // Build personalized lab payment message with unique done button id
+      const tsLab = Date.now();
+      const doneLabButtonId = `btn_payment_done_${tsLab}`;
       const paymentPayload = {
-        messageId: `msg_payment_lab_${Date.now()}`,
+        messageId: `msg_payment_lab_${tsLab}`,
         name: 'Payment Required - Lab Test',
         type: 'interactive_button',
         status: 'published',
@@ -201,7 +264,7 @@ router.post('/send-labtest', async (req, res) => {
           body: `Please complete your payment to confirm the lab test:\n\n🧪 ${labTestName}\n\n[Payment Link: https://pay.hospital.com/abc123]`,
           footer: 'Secure payment powered by Razorpay',
           buttons: [
-            { buttonId: 'btn_payment_done', title: '✅ Payment Completed', triggerId: 'trigger_payment_done', nextAction: 'send_message', targetMessageId: 'msg_appointment_confirmed' },
+            { buttonId: doneLabButtonId, title: '✅ Payment Completed', triggerId: `trigger_payment_done_${tsLab}`, nextAction: 'send_message', targetMessageId: confirmLabMsg.messageId },
             { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' },
             { buttonId: 'btn_cancel_payment', title: '❌ Cancel', triggerId: 'trigger_cancel_payment', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
           ]
@@ -209,8 +272,9 @@ router.post('/send-labtest', async (req, res) => {
       };
 
       const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
-      const dynamicTrigger = {
-        triggerId: `trigger_lab_pay_now_${Date.now()}`,
+
+      const dynamicTriggerPayNowLab = {
+        triggerId: `trigger_lab_pay_now_${tsLab}`,
         triggerType: 'button_click',
         triggerValue: 'btn_lab_pay_now',
         nextAction: 'send_message',
@@ -219,7 +283,21 @@ router.post('/send-labtest', async (req, res) => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      messageLibraryService.triggers.unshift(dynamicTrigger);
+
+      const dynamicTriggerDoneLab = {
+        triggerId: `trigger_payment_done_${tsLab}`,
+        triggerType: 'button_click',
+        triggerValue: doneLabButtonId,
+        nextAction: 'send_message',
+        targetId: confirmLabMsg.messageId,
+        messageId: confirmLabMsg.messageId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Unshift so custom triggers are checked first
+      messageLibraryService.triggers.unshift(dynamicTriggerDoneLab);
+      messageLibraryService.triggers.unshift(dynamicTriggerPayNowLab);
     } catch (err) {
       console.error('Failed to register lab personalized payment message/trigger:', err);
     }
