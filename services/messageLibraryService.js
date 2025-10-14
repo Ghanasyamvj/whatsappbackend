@@ -767,8 +767,8 @@ class MessageLibraryService {
       if (messageEntry && messageEntry.contentPayload && messageEntry.contentPayload.header && messageEntry.contentPayload.body) {
         const nameHeader = String(messageEntry.contentPayload.header).trim();
         const bodyStr = String(messageEntry.contentPayload.body);
-        // If body contains a 'Dr. <name>' pattern, replace the first occurrence with header value
-        if (nameHeader && /Dr\.?\s+[^\n\r]*/i.test(bodyStr)) {
+          // Only perform replacement when header itself appears to be a doctor's name (contains 'Dr')
+          if (nameHeader && /Dr\.?\s*/i.test(nameHeader) && /Dr\.?\s+[^\n\r]*/i.test(bodyStr)) {
           try {
             const replaced = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, nameHeader);
             messageEntry.contentPayload.body = replaced;

@@ -458,10 +458,16 @@ async function handleInteractiveResponse(message) {
               const confirmToSend = JSON.parse(JSON.stringify(confirmMsg));
               if (doctorName) {
                 confirmToSend.contentPayload = confirmToSend.contentPayload || {};
-                // set header to doctor's name (or keep existing formatting)
-                confirmToSend.contentPayload.header = doctorName;
+                // Use a static header and ensure doctor's name appears in the body
+                confirmToSend.contentPayload.header = 'Appointment Confirmation';
                 if (confirmToSend.contentPayload.body) {
-                  confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\. [^\n\r]*/i, doctorName);
+                  try {
+                    if (/Dr\.?\s+[^\n\r]*/i.test(String(confirmToSend.contentPayload.body))) {
+                      confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\.?\s+[^\n\r]*/i, doctorName);
+                    } else {
+                      confirmToSend.contentPayload.body = `${doctorName}\n${String(confirmToSend.contentPayload.body)}`;
+                    }
+                  } catch (e) { /* ignore */ }
                 }
               }
               await messageLibraryService.sendLibraryMessage(confirmToSend, message.from);
@@ -615,9 +621,15 @@ async function handleInteractiveResponse(message) {
               const confirmToSend = JSON.parse(JSON.stringify(confirmMsg));
               if (doctorName) {
                 confirmToSend.contentPayload = confirmToSend.contentPayload || {};
-                confirmToSend.contentPayload.header = doctorName;
+                confirmToSend.contentPayload.header = 'Appointment Confirmation';
                 if (confirmToSend.contentPayload.body) {
-                  confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\. [^\n\r]*/i, doctorName);
+                  try {
+                    if (/Dr\.?\s+[^\n\r]*/i.test(String(confirmToSend.contentPayload.body))) {
+                      confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\.?\s+[^\n\r]*/i, doctorName);
+                    } else {
+                      confirmToSend.contentPayload.body = `${doctorName}\n${String(confirmToSend.contentPayload.body)}`;
+                    }
+                  } catch (e) { /* ignore */ }
                 }
               }
               await messageLibraryService.sendLibraryMessage(confirmToSend, message.from);
@@ -759,9 +771,15 @@ async function handleInteractiveResponse(message) {
                     const confirmToSend = JSON.parse(JSON.stringify(confirmMsg));
                     if (doctorName) {
                       confirmToSend.contentPayload = confirmToSend.contentPayload || {};
-                      confirmToSend.contentPayload.header = doctorName;
+                      confirmToSend.contentPayload.header = 'Appointment Confirmation';
                       if (confirmToSend.contentPayload.body) {
-                        confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\. [^\n\r]*/i, doctorName);
+                        try {
+                          if (/Dr\.?\s+[^\n\r]*/i.test(String(confirmToSend.contentPayload.body))) {
+                            confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\.?\s+[^\n\r]*/i, doctorName);
+                          } else {
+                            confirmToSend.contentPayload.body = `${doctorName}\n${String(confirmToSend.contentPayload.body)}`;
+                          }
+                        } catch (e) { /* ignore */ }
                       }
                     }
                     await messageLibraryService.sendLibraryMessage(confirmToSend, message.from);
