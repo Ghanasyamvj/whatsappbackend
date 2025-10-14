@@ -940,6 +940,20 @@ class MessageLibraryService {
     
     let messagePayload;
 
+    // Final runtime sanitization: enforce static headers for booking flows
+    try {
+      if (messageEntry && messageEntry.messageId === 'msg_book_interactive') {
+        messageEntry.contentPayload = messageEntry.contentPayload || {};
+        messageEntry.contentPayload.header = 'Book Your Appointment 📅';
+      }
+      if (messageEntry && messageEntry.messageId === 'msg_doctor_selection') {
+        messageEntry.contentPayload = messageEntry.contentPayload || {};
+        messageEntry.contentPayload.header = 'Available Doctors 👩‍⚕️';
+      }
+    } catch (e) {
+      console.warn('Could not enforce runtime static headers for booking flow:', e?.message || e);
+    }
+
     switch (messageEntry.type) {
       case 'standard_text':
         messagePayload = {
@@ -971,7 +985,8 @@ class MessageLibraryService {
         };
 
         if (payload.header) {
-          interactive.header = { type: 'text', text: payload.header };
+          // ensure header source is the sanitized contentPayload.header
+          interactive.header = { type: 'text', text: String(payload.header) };
         }
         if (payload.footer) {
           interactive.footer = { text: payload.footer };
