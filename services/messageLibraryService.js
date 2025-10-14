@@ -225,7 +225,7 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Appointment Confirmation',
+          header: 'Confirm Your Appointment ✅',
           body: 'Appointment Details:\n👨‍⚕️ Dr. Sharma\n📅 Monday, Oct 14\n🕘 9:30 AM\n💰 Fee: ₹750\n\nWould you like to confirm and proceed to payment?',
           footer: 'You can reschedule if needed',
           buttons: [
@@ -761,6 +761,15 @@ class MessageLibraryService {
       messageEntry = await this.buildDynamicMessage(messageEntry);
     } catch (err) {
       console.error('Error enriching messageEntry with dynamic data:', err);
+    }
+    // If this is the confirm appointment template, force the header to the static confirm header
+    try {
+      if (messageEntry && messageEntry.messageId === 'msg_confirm_appointment') {
+        messageEntry.contentPayload = messageEntry.contentPayload || {};
+        messageEntry.contentPayload.header = 'Confirm Your Appointment ✅';
+      }
+    } catch (e) {
+      console.warn('Failed to enforce static confirm header:', e?.message || e);
     }
     // If this is a confirm-appointment style message and header is set, ensure the body reflects the header
     try {
