@@ -841,8 +841,14 @@ class MessageLibraryService {
       });
       // Detailed payload preview for debugging (avoid logging sensitive tokens)
       try {
-        const preview = { ...messagePayload };
-        if (preview.interactive && preview.interactive.body) preview.interactive.body = String(preview.interactive.body).slice(0, 800);
+        // Deep-clone the payload for logging so we don't accidentally mutate the real payload
+        const preview = JSON.parse(JSON.stringify(messagePayload));
+        if (preview.interactive && preview.interactive.body && typeof preview.interactive.body === 'object') {
+          // keep only the text property preview
+          if (preview.interactive.body.text) preview.interactive.body.text = String(preview.interactive.body.text).slice(0, 800);
+        } else if (preview.interactive && preview.interactive.body) {
+          preview.interactive.body = String(preview.interactive.body).slice(0, 800);
+        }
         if (preview.text && preview.text.body) preview.text.body = String(preview.text.body).slice(0, 800);
         console.log('📦 WhatsApp API payload preview:', preview);
       } catch (e) {
