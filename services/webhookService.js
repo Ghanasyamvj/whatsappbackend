@@ -561,6 +561,7 @@ async function handleInteractiveResponse(message) {
               try {
                 const doc = await doctorService.getDoctorById(trigger.triggerValue).catch(() => null);
                 if (doc) {
+                  // ensure we clone before modifying
                   msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
                   msgToSend.contentPayload = msgToSend.contentPayload || {};
                   const originalHeader = String(msgToSend.contentPayload.header || '');
@@ -600,6 +601,7 @@ async function handleInteractiveResponse(message) {
                   }
                 }
                 if (inferred) {
+                  // clone before modifying
                   msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
                   msgToSend.contentPayload = msgToSend.contentPayload || {};
                   const originalHeader = String(msgToSend.contentPayload.header || '');
@@ -739,7 +741,11 @@ async function handleInteractiveResponse(message) {
                     try {
                       const msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
                       msgToSend.contentPayload = msgToSend.contentPayload || {};
-                      msgToSend.contentPayload.header = doctor.name || msgToSend.contentPayload.header;
+                      // clone before modifying header
+                      const cloned = JSON.parse(JSON.stringify(msgToSend));
+                      cloned.contentPayload = cloned.contentPayload || {};
+                      cloned.contentPayload.header = doctor.name || cloned.contentPayload.header;
+                      msgToSend = cloned;
                       await messageLibraryService.sendLibraryMessage(msgToSend, message.from);
                     } catch (e) {
                       console.error('Failed to forward slots message after creating pending booking:', e);
