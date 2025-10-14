@@ -522,21 +522,79 @@ async function handleInteractiveResponse(message) {
       // If trigger asks to send a library message
         if (trigger.nextAction === 'send_message' && result.nextMessage) {
         try {
-          // If this next message is the slots message, and the trigger is a list_selection (doctor), inject doctor's name into header
+          // If this next message is the slots message, try to inject doctor's name into header.
+          // Handle both list-selection triggers (doctor select) and button triggers like 'reschedule'.
           if (result.nextMessage && (result.nextMessage.messageId === 'msg_sharma_slots_interactive' || result.nextMessage.messageId === trigger.targetId)) {
             let msgToSend = result.nextMessage;
-            if (trigger.triggerType === 'list_selection' && trigger.triggerValue) {
+            let injected = false;
+
+            // 1) Try to get doctorName from a pending booking for this user (covers reschedule flows)
+            try {
+              const pending = await bookingService.getPendingBookingForUser(message.from).catch(() => null);
+              if (pending && pending.meta && pending.meta.doctorName) {
+                msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
+                msgToSend.contentPayload = msgToSend.contentPayload || {};
+                msgToSend.contentPayload.header = pending.meta.doctorName || msgToSend.contentPayload.header;
+                injected = true;
+                console.log('ℹ️ Injected doctorName from pending booking for slots message:', pending.meta.doctorName);
+              }
+            } catch (e) {
+              console.warn('Could not read pending booking to inject doctor name:', e?.message || e);
+            }
+
+            // 2) If not injected yet, fall back to list_selection trigger behavior (dynamic doctor id)
+            if (!injected && trigger.triggerType === 'list_selection' && trigger.triggerValue) {
               try {
                 const doc = await doctorService.getDoctorById(trigger.triggerValue).catch(() => null);
                 if (doc) {
                   msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
                   msgToSend.contentPayload = msgToSend.contentPayload || {};
                   msgToSend.contentPayload.header = doc.name || msgToSend.contentPayload.header;
+                  injected = true;
                 }
               } catch (e) {
                 console.warn('Could not fetch doctor to inject header:', e?.message || e);
               }
             }
+
+            // 3) If still not injected, try to infer doctor's name from recently persisted messages for this user
+            if (!injected) {
+              try {
+                const recent = await flowService.getMessagesByUser(message.from).catch(() => []);
+                const doctorMatchRegex = /Dr\.?\s+([A-Z][a-zA-Z\-']{1,50})/;
+                let inferred = null;
+                for (const m of recent) {
+                  const content = m.content;
+                  if (!content) continue;
+                  // content may be an object (interactive contentPayload) or string
+                  if (typeof content === 'string') {
+                    const mm = content.match(doctorMatchRegex);
+                    if (mm) { inferred = `Dr. ${mm[1]}`; break; }
+                  } else if (typeof content === 'object') {
+                    const cp = content.contentPayload || content;
+                    if (cp && cp.header && typeof cp.header === 'string') {
+                      const mm = String(cp.header).match(doctorMatchRegex);
+                      if (mm) { inferred = `Dr. ${mm[1]}`; break; }
+                    }
+                    if (cp && cp.body && typeof cp.body === 'string') {
+                      const mm = String(cp.body).match(doctorMatchRegex);
+                      if (mm) { inferred = `Dr. ${mm[1]}`; break; }
+                    }
+                  }
+                }
+                if (inferred) {
+                  msgToSend = JSON.parse(JSON.stringify(result.nextMessage));
+                  msgToSend.contentPayload = msgToSend.contentPayload || {};
+                  msgToSend.contentPayload.header = inferred;
+                  injected = true;
+                  console.log('ℹ️ Injected doctorName inferred from recent messages for slots message:', inferred);
+                }
+              } catch (e) {
+                console.warn('Could not infer doctor name from recent messages:', e?.message || e);
+              }
+            }
+
+            // 3) As a last resort, if the slots template already contains a header, use it (no change)
             console.log(`📤 Sending next message: "${msgToSend.name}" to ${message.from}`);
             await messageLibraryService.sendLibraryMessage(msgToSend, message.from);
             console.log(`✅ Successfully sent interactive response message to ${message.from}`);
@@ -683,7 +741,38 @@ async function handleInteractiveResponse(message) {
               }
 
               await bookingService.createPendingBooking(message.from, { bookingTime: slotTitle, meta: { slotTitle } });
-              if (result.nextMessage) await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+              if (result.nextMessage) {
+                // If the next message is the confirm appointment, inject doctor name when possible
+                if (result.nextMessage.messageId === 'msg_confirm_appointment') {
+                  try {
+                    const confirmMsg = result.nextMessage;
+                    let doctorName = null;
+                    const pending = await bookingService.getPendingBookingForUser(message.from).catch(() => null);
+                    if (pending && pending.meta && pending.meta.doctorName) doctorName = pending.meta.doctorName;
+                    if (!doctorName) {
+                      // try infer from trigger if present
+                      if (trigger && trigger.triggerType === 'list_selection' && trigger.triggerValue) {
+                        const doc = await doctorService.getDoctorById(trigger.triggerValue).catch(() => null);
+                        if (doc) doctorName = doc.name;
+                      }
+                    }
+                    const confirmToSend = JSON.parse(JSON.stringify(confirmMsg));
+                    if (doctorName) {
+                      confirmToSend.contentPayload = confirmToSend.contentPayload || {};
+                      confirmToSend.contentPayload.header = doctorName;
+                      if (confirmToSend.contentPayload.body) {
+                        confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\. [^\n\r]*/i, doctorName);
+                      }
+                    }
+                    await messageLibraryService.sendLibraryMessage(confirmToSend, message.from);
+                  } catch (e) {
+                    console.error('Failed to send confirm message with injected doctor name (fallback path):', e);
+                    await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+                  }
+                } else {
+                  await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+                }
+              }
               console.log('✅ Pending booking created for slot selection:', slotTitle);
               return;
             } catch (err) {
