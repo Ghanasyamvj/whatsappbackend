@@ -293,6 +293,27 @@ async function handleInteractiveResponse(message) {
     const rawListId = message.interactive?.list_reply?.id || null;
 
     if ((!result || !result.trigger) && rawListId) {
+      // Check if this is a patient selection first
+      try {
+        const patient = await patientService.getPatientById(rawListId).catch(() => null);
+        if (patient) {
+          console.log('ℹ️ Fallback: patient selected from existing patients list:', rawListId);
+          // Send welcome message for existing patient
+          const welcomeMsg = messageLibraryService.getMessageById('msg_welcome_interactive');
+          if (welcomeMsg) {
+            try {
+              await messageLibraryService.sendLibraryMessage(welcomeMsg, message.from);
+              console.log('✅ Welcome message sent to existing patient');
+            } catch (e) {
+              console.error('Failed to send welcome message:', e);
+            }
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking patient selection:', err);
+      }
+
       // Treat rawListId as doctor id (common when dynamic lists are built)
       try {
         const doc = await doctorService.getDoctorById(rawListId).catch(() => null);
