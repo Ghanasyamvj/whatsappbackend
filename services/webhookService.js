@@ -437,9 +437,36 @@ async function handleInteractiveResponse(message) {
             if (btn) slotTitle = btn.title;
           }
           await bookingService.createPendingBooking(message.from, { bookingTime: slotTitle, meta: { slotTitle } });
-          // forward confirm message if exists
+          // forward confirm message if exists - inject selected slot/doctor info when possible
           const confirmMsg = messageLibraryService.getMessageById('msg_confirm_appointment');
-          if (confirmMsg) { try { await messageLibraryService.sendLibraryMessage(confirmMsg, message.from); } catch(e){console.error('Failed to send confirm message in fallback', e)} }
+          if (confirmMsg) {
+            try {
+              // try to read doctor name from pending booking meta (if available) or from slots message
+              let doctorName = null;
+              try {
+                const pending = await bookingService.getPendingBookingForUser(message.from).catch(() => null);
+                if (pending && pending.meta && pending.meta.doctorName) doctorName = pending.meta.doctorName;
+              } catch (e) { /* ignore */ }
+              // fallback: try to infer from slots message header
+              if (!doctorName) {
+                const slotsMsg = messageLibraryService.getMessageById('msg_sharma_slots_interactive');
+                if (slotsMsg && slotsMsg.contentPayload && slotsMsg.contentPayload.header) {
+                  // header might be like 'Dr. Sharma - Available Slots 📅'
+                  doctorName = String(slotsMsg.contentPayload.header).split('\n')[0].split(' - ')[0];
+                }
+              }
+              const confirmToSend = JSON.parse(JSON.stringify(confirmMsg));
+              if (doctorName) {
+                confirmToSend.contentPayload = confirmToSend.contentPayload || {};
+                // set header to doctor's name (or keep existing formatting)
+                confirmToSend.contentPayload.header = doctorName;
+                if (confirmToSend.contentPayload.body) {
+                  confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\. [^\n\r]*/i, doctorName);
+                }
+              }
+              await messageLibraryService.sendLibraryMessage(confirmToSend, message.from);
+            } catch (e) { console.error('Failed to send confirm message in fallback', e) }
+          }
           console.log('ℹ️ Fallback: pending booking created for slot:', slotTitle);
           return;
         }
@@ -513,6 +540,33 @@ async function handleInteractiveResponse(message) {
             console.log(`📤 Sending next message: "${msgToSend.name}" to ${message.from}`);
             await messageLibraryService.sendLibraryMessage(msgToSend, message.from);
             console.log(`✅ Successfully sent interactive response message to ${message.from}`);
+          } else if (result.nextMessage && result.nextMessage.messageId === 'msg_confirm_appointment') {
+            // If nextMessage is the confirm appointment message, inject doctor name if possible
+            try {
+              const confirmMsg = result.nextMessage;
+              let doctorName = null;
+              if (trigger && trigger.triggerType === 'button_click' && trigger.triggerValue && String(trigger.triggerValue).startsWith('btn_slot_')) {
+                // try to find doctorName from pending booking or slots meta
+                const pending = await bookingService.getPendingBookingForUser(message.from).catch(() => null);
+                if (pending && pending.meta && pending.meta.doctorName) doctorName = pending.meta.doctorName;
+              }
+              if (!doctorName && trigger && trigger.triggerType === 'list_selection' && trigger.triggerValue) {
+                const doc = await doctorService.getDoctorById(trigger.triggerValue).catch(() => null);
+                if (doc) doctorName = doc.name;
+              }
+              const confirmToSend = JSON.parse(JSON.stringify(confirmMsg));
+              if (doctorName) {
+                confirmToSend.contentPayload = confirmToSend.contentPayload || {};
+                confirmToSend.contentPayload.header = doctorName;
+                if (confirmToSend.contentPayload.body) {
+                  confirmToSend.contentPayload.body = confirmToSend.contentPayload.body.replace(/Dr\. [^\n\r]*/i, doctorName);
+                }
+              }
+              await messageLibraryService.sendLibraryMessage(confirmToSend, message.from);
+              console.log(`✅ Successfully sent interactive response message to ${message.from}`);
+            } catch (error) {
+              console.error('❌ Failed to send confirm appointment with injected doctor name:', error.message);
+            }
           } else {
             console.log(`📤 Sending next message: "${result.nextMessage.name}" to ${message.from}`);
             await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
