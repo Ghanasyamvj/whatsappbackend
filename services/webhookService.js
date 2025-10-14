@@ -778,7 +778,8 @@ async function handleInteractiveResponse(message) {
       }
 
       // Handle Payment Completed button: finalize booking
-      if (trigger.triggerId === 'trigger_payment_done' || trigger.triggerValue === 'btn_payment_done') {
+      // Support dynamic payment-done triggers/button ids that include timestamps
+      if (trigger.triggerId === 'trigger_payment_done' || trigger.triggerValue === 'btn_payment_done' || (trigger.triggerId && trigger.triggerId.startsWith && trigger.triggerId.startsWith('trigger_payment_done_')) || (trigger.triggerValue && trigger.triggerValue.startsWith && trigger.triggerValue.startsWith('btn_payment_done_'))) {
         try {
           const pending = await bookingService.getPendingBookingForUser(message.from);
           if (!pending) {

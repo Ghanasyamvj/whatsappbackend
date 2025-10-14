@@ -636,10 +636,27 @@ class MessageLibraryService {
 
   // Find matching triggers for button interactions
   findButtonTrigger(buttonId) {
-    return this.triggers.find(trigger => 
+    // Debug: list candidate triggers that are button_click
+    try {
+      const candidates = this.triggers.filter(t => t.triggerType === 'button_click');
+      const sample = candidates.slice(0, 10).map(c => ({ triggerId: c.triggerId, triggerValue: c.triggerValue }));
+      console.log('🔍 findButtonTrigger - buttonId:', buttonId, 'candidatesSample:', sample.length ? sample : 'none');
+    } catch (e) {
+      console.warn('🔍 findButtonTrigger debug failed:', e?.message || e);
+    }
+
+    const found = this.triggers.find(trigger => 
       trigger.triggerType === 'button_click' && 
       trigger.triggerValue === buttonId
     );
+
+    if (found) {
+      console.log('🔍 findButtonTrigger - matched:', { triggerId: found.triggerId, triggerValue: found.triggerValue });
+    } else {
+      console.log('🔍 findButtonTrigger - no exact match for buttonId:', buttonId);
+    }
+
+    return found;
   }
 
   // Find matching triggers for list selections

@@ -90,8 +90,9 @@ router.post('/send', async (req, res) => {
       });
 
       // Build personalized payment message with a unique 'payment done' button id so it maps to the confirmation above
-      const ts = Date.now();
-      const doneButtonId = `btn_payment_done_${ts}`;
+        const ts = Date.now();
+        const doneButtonId = `btn_payment_done_${ts}`;
+        const payNowButtonId = `btn_prescription_pay_now_${ts}`;
       const paymentPayload = {
         messageId: `msg_payment_pres_${ts}`,
         name: 'Payment Required - Prescription',
@@ -112,12 +113,13 @@ router.post('/send', async (req, res) => {
       // Add the personalized payment message to the in-memory message library so it can be sent on trigger
       const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
 
-      // Register dynamic trigger so clicking the original 'Pay Now' on the prescription
-      // sends the personalized payment message we just added.
+      // Register dynamic trigger so clicking the Pay Now button on the prescription
+      // sends the personalized payment message we just added. Use a unique Pay Now button id
+      // to avoid colliding with global/static triggers.
       const dynamicTriggerPayNow = {
         triggerId: `trigger_pres_pay_now_${ts}`,
         triggerType: 'button_click',
-        triggerValue: 'btn_prescription_pay_now',
+        triggerValue: payNowButtonId,
         nextAction: 'send_message',
         targetId: addedPaymentMsg.messageId,
         messageId: addedPaymentMsg.messageId,
@@ -137,6 +139,18 @@ router.post('/send', async (req, res) => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
+
+      // Update the interactive prescription's Pay Now button to use the unique id and
+      // point to the personalized payment message (for clarity in logs / client metadata).
+      try {
+        if (interactivePrescription && interactivePrescription.contentPayload && interactivePrescription.contentPayload.buttons && interactivePrescription.contentPayload.buttons.length) {
+          interactivePrescription.contentPayload.buttons[0].buttonId = payNowButtonId;
+          interactivePrescription.contentPayload.buttons[0].triggerId = dynamicTriggerPayNow.triggerId;
+          interactivePrescription.contentPayload.buttons[0].targetMessageId = addedPaymentMsg.messageId;
+        }
+      } catch (e) {
+        console.warn('Could not wire unique pay now button id to interactivePrescription:', e?.message || e);
+      }
 
       // Unshift both triggers so they take precedence over global/default triggers.
       messageLibraryService.triggers.unshift(dynamicTriggerDone);
@@ -251,9 +265,10 @@ router.post('/send-labtest', async (req, res) => {
         }
       });
 
-      // Build personalized lab payment message with unique done button id
-      const tsLab = Date.now();
-      const doneLabButtonId = `btn_payment_done_${tsLab}`;
+  // Build personalized lab payment message with unique done button id
+  const tsLab = Date.now();
+  const doneLabButtonId = `btn_payment_done_${tsLab}`;
+  const payNowLabButtonId = `btn_lab_pay_now_${tsLab}`;
       const paymentPayload = {
         messageId: `msg_payment_lab_${tsLab}`,
         name: 'Payment Required - Lab Test',
@@ -276,7 +291,7 @@ router.post('/send-labtest', async (req, res) => {
       const dynamicTriggerPayNowLab = {
         triggerId: `trigger_lab_pay_now_${tsLab}`,
         triggerType: 'button_click',
-        triggerValue: 'btn_lab_pay_now',
+        triggerValue: payNowLabButtonId,
         nextAction: 'send_message',
         targetId: addedPaymentMsg.messageId,
         messageId: addedPaymentMsg.messageId,
@@ -294,6 +309,17 @@ router.post('/send-labtest', async (req, res) => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
+
+      // Wire interactive lab prescription's Pay Now button to unique id/trigger
+      try {
+        if (interactiveLabPrescription && interactiveLabPrescription.contentPayload && interactiveLabPrescription.contentPayload.buttons && interactiveLabPrescription.contentPayload.buttons.length) {
+          interactiveLabPrescription.contentPayload.buttons[0].buttonId = payNowLabButtonId;
+          interactiveLabPrescription.contentPayload.buttons[0].triggerId = dynamicTriggerPayNowLab.triggerId;
+          interactiveLabPrescription.contentPayload.buttons[0].targetMessageId = addedPaymentMsg.messageId;
+        }
+      } catch (e) {
+        console.warn('Could not wire unique pay now button id to interactiveLabPrescription:', e?.message || e);
+      }
 
       // Unshift so custom triggers are checked first
       messageLibraryService.triggers.unshift(dynamicTriggerDoneLab);
