@@ -581,6 +581,28 @@ class MessageLibraryService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
+      ,
+      // Prescription payment buttons
+      {
+        triggerId: 'trigger_prescription_pay_now',
+        triggerType: 'button_click',
+        triggerValue: 'btn_prescription_pay_now',
+        nextAction: 'send_message',
+        targetId: 'msg_payment_link',
+        messageId: 'msg_payment_link',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        triggerId: 'trigger_prescription_pay_later',
+        triggerType: 'button_click',
+        triggerValue: 'btn_prescription_pay_later',
+        nextAction: 'send_message',
+        targetId: 'msg_welcome_interactive',
+        messageId: 'msg_welcome_interactive',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
     ];
   }
 

@@ -1,5 +1,6 @@
 const express = require('express');
 const { sendTextMessage } = require('../services/whatsappService');
+const messageLibraryService = require('../services/messageLibraryService');
 
 const router = express.Router();
 
@@ -34,46 +35,53 @@ router.post('/send', async (req, res) => {
       formattedPhone = '91' + formattedPhone; // Add India country code if missing
     }
 
-    // Create prescription message
-    const prescriptionMessage = `
-🏥 *Prescription Details*
+    // Build interactive prescription message with Pay Now / Pay Later buttons
+    const interactivePrescription = {
+      messageId: `msg_prescription_${Date.now()}`,
+      name: 'Prescription - Interactive',
+      type: 'interactive_button',
+      status: 'published',
+      contentPayload: {
+        header: '� Prescription Details',
+        body: `👤 ${patientName}\n💊 ${medicineName}\n📋 ${dosage}\n⏰ ${frequency}\n📅 ${duration}\n\n_Prescribed on: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_`,
+        footer: 'Tap Pay Now to complete payment or Pay Later to return to home',
+        buttons: [
+          {
+            buttonId: 'btn_prescription_pay_now',
+            title: '💳 Pay Now',
+            triggerId: 'trigger_prescription_pay_now',
+            nextAction: 'send_message',
+            targetMessageId: 'msg_payment_link'
+          },
+          {
+            buttonId: 'btn_prescription_pay_later',
+            title: '⏳ Pay Later',
+            triggerId: 'trigger_prescription_pay_later',
+            nextAction: 'send_message',
+            targetMessageId: 'msg_welcome_interactive'
+          }
+        ]
+      }
+    };
 
-👤 *Patient:* ${patientName}
-🆔 *Patient ID:* ${patientId || 'N/A'}
+    console.log(`📤 Sending interactive prescription to ${formattedPhone} for patient ${patientName}`);
 
-💊 *Medicine:* ${medicineName}
-📋 *Dosage:* ${dosage}
-⏰ *Frequency:* ${frequency}
-📅 *Duration:* ${duration}
-
-⚠️ *Important Instructions:*
-- Take medicine as prescribed
-- Complete the full course
-- Contact doctor if you experience any side effects
-
-_Prescribed on: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_
-
-For any queries, please contact your healthcare provider.
-    `.trim();
-
-    console.log(`📤 Sending prescription to ${formattedPhone} for patient ${patientName}`);
-
-    // Send WhatsApp message
-    const result = await sendTextMessage(formattedPhone, prescriptionMessage);
-
-    console.log('✅ Prescription sent successfully:', result);
-
-    res.json({
-      success: true,
-      data: {
-        messageId: result.messageId,
-        phoneNumber: formattedPhone,
-        patientName,
-        medicineName,
-        timestamp: result.timestamp
-      },
-      message: 'Prescription sent successfully via WhatsApp'
-    });
+    try {
+      const result = await messageLibraryService.sendLibraryMessage(interactivePrescription, formattedPhone);
+      console.log('✅ Interactive prescription sent successfully:', result);
+      res.json({ success: true, data: { messageId: result.messageId, phoneNumber: formattedPhone, patientName, medicineName, timestamp: result.timestamp }, message: 'Prescription sent successfully via WhatsApp' });
+    } catch (err) {
+      console.error('❌ Failed to send interactive prescription via WhatsApp, falling back to text:', err?.message || err);
+      // fallback to sending plain text
+      const fallbackMessage = `Prescription for ${patientName}: ${medicineName} - ${dosage} - ${frequency} - ${duration}`;
+      try {
+        const textResult = await sendTextMessage(formattedPhone, fallbackMessage);
+        res.json({ success: true, data: { messageId: textResult.messageId, phoneNumber: formattedPhone, patientName, medicineName, timestamp: textResult.timestamp }, message: 'Prescription sent as text via WhatsApp (fallback)' });
+      } catch (sendErr) {
+        console.error('❌ Failed to send fallback text prescription:', sendErr?.message || sendErr);
+        res.status(500).json({ success: false, error: 'Failed to send prescription', details: sendErr?.message || sendErr });
+      }
+    }
 
   } catch (error) {
     console.error('❌ Error sending prescription:', error);
