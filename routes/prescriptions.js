@@ -172,43 +172,74 @@ router.post('/send-labtest', async (req, res) => {
       formattedPhone = '91' + formattedPhone;
     }
 
-    // Create lab test message
-    const labTestMessage = `
-🏥 *Lab Test Prescription*
+    // Build interactive lab-test prescription with Pay Now / Pay Later buttons
+    const interactiveLabPrescription = {
+      messageId: `msg_lab_prescription_${Date.now()}`,
+      name: 'Lab Test Prescription - Interactive',
+      type: 'interactive_button',
+      status: 'published',
+      contentPayload: {
+        header: '🧪 Lab Test Prescription',
+        body: `👤 *Patient:* ${patientName}\n🆔 *Patient ID:* ${patientId || 'N/A'}\n\n🧪 *Test:* ${labTestName}\n${notes ? `📝 *Notes:* ${notes}\n\n` : ''}⚠️ *Instructions:*\n• Please visit the lab for sample collection\n• Fasting may be required for certain tests\n• Carry this prescription and your ID\n\n_Prescribed on: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_`,
+        footer: 'For any queries, please contact your healthcare provider.',
+        buttons: [
+          { buttonId: 'btn_lab_pay_now', title: '💳 Pay Now', triggerId: 'trigger_prescription_pay_now', nextAction: 'send_message', targetMessageId: 'msg_payment_link' },
+          { buttonId: 'btn_lab_pay_later', title: '⏳ Pay Later', triggerId: 'trigger_prescription_pay_later', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
+        ]
+      }
+    };
 
-👤 *Patient:* ${patientName}
-🆔 *Patient ID:* ${patientId || 'N/A'}
+    // Register personalized payment message & dynamic trigger for lab pay now (similar to medicine flow)
+    try {
+      const paymentPayload = {
+        messageId: `msg_payment_lab_${Date.now()}`,
+        name: 'Payment Required - Lab Test',
+        type: 'interactive_button',
+        status: 'published',
+        contentPayload: {
+          header: '💳 Payment Required',
+          body: `Please complete your payment to confirm the lab test:\n\n🧪 ${labTestName}\n\n[Payment Link: https://pay.hospital.com/abc123]`,
+          footer: 'Secure payment powered by Razorpay',
+          buttons: [
+            { buttonId: 'btn_payment_done', title: '✅ Payment Completed', triggerId: 'trigger_payment_done', nextAction: 'send_message', targetMessageId: 'msg_appointment_confirmed' },
+            { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' },
+            { buttonId: 'btn_cancel_payment', title: '❌ Cancel', triggerId: 'trigger_cancel_payment', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
+          ]
+        }
+      };
 
-🧪 *Lab Test:* ${labTestName}
-${notes ? `📝 *Notes:* ${notes}` : ''}
+      const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
+      const dynamicTrigger = {
+        triggerId: `trigger_lab_pay_now_${Date.now()}`,
+        triggerType: 'button_click',
+        triggerValue: 'btn_lab_pay_now',
+        nextAction: 'send_message',
+        targetId: addedPaymentMsg.messageId,
+        messageId: addedPaymentMsg.messageId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      messageLibraryService.triggers.unshift(dynamicTrigger);
+    } catch (err) {
+      console.error('Failed to register lab personalized payment message/trigger:', err);
+    }
 
-⚠️ *Instructions:*
-- Please visit the lab for sample collection
-- Fasting may be required for certain tests
-- Carry this prescription and your ID
+    console.log(`📤 Sending interactive lab prescription to ${formattedPhone} for patient ${patientName}`);
 
-_Prescribed on: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_
-
-For any queries, please contact your healthcare provider.
-    `.trim();
-
-    console.log(`📤 Sending lab test prescription to ${formattedPhone} for patient ${patientName}`);
-
-    const result = await sendTextMessage(formattedPhone, labTestMessage);
-
-    console.log('✅ Lab test prescription sent successfully:', result);
-
-    res.json({
-      success: true,
-      data: {
-        messageId: result.messageId,
-        phoneNumber: formattedPhone,
-        patientName,
-        labTestName,
-        timestamp: result.timestamp
-      },
-      message: 'Lab test prescription sent successfully via WhatsApp'
-    });
+    try {
+      const result = await messageLibraryService.sendLibraryMessage(interactiveLabPrescription, formattedPhone);
+      console.log('✅ Interactive lab prescription sent successfully:', result);
+      res.json({ success: true, data: { messageId: result.messageId, phoneNumber: formattedPhone, patientName, labTestName, timestamp: result.timestamp }, message: 'Lab test prescription sent successfully via WhatsApp' });
+    } catch (err) {
+      console.error('❌ Failed to send interactive lab prescription via WhatsApp:', err?.message || err);
+      try {
+        await flowService.createMessageWithFlow({ userPhone: formattedPhone, messageType: 'interactive', content: interactiveLabPrescription.contentPayload, isResponse: false });
+        res.json({ success: true, data: { persisted: true, phoneNumber: formattedPhone }, message: 'Interactive lab prescription persisted (WhatsApp send failed)' });
+      } catch (persistErr) {
+        console.error('❌ Failed to persist interactive lab prescription:', persistErr?.message || persistErr);
+        res.status(500).json({ success: false, error: 'Failed to send lab test prescription', details: persistErr?.message || persistErr });
+      }
+    }
 
   } catch (error) {
     console.error('❌ Error sending lab test prescription:', error);
