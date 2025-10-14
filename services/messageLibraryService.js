@@ -631,23 +631,64 @@ class MessageLibraryService {
       }
     ];
 
-    // Sanitization: ensure important templates have correct static headers
+    // Sanitization: apply a general header sanitizer to every message header on startup
     try {
-      const ensureHeader = (id, header) => {
-        const m = this.messages.find(x => x.messageId === id);
-        if (m && m.contentPayload) {
-          m.contentPayload.header = header;
-        }
-      };
-  ensureHeader('msg_confirm_appointment', 'Confirm Your Appointment ✅');
-  ensureHeader('msg_payment_link', 'Payment Required 💳');
-  ensureHeader('msg_appointment_confirmed', 'Appointment Confirmed! 🎉');
-  // Also ensure booking flow and doctor selection headers are correct
-  ensureHeader('msg_book_interactive', 'Book Your Appointment 📅');
-  ensureHeader('msg_doctor_selection', 'Available Doctors 👩‍⚕️');
+      if (this.messages && Array.isArray(this.messages)) {
+        this.messages.forEach(m => {
+          if (m && m.contentPayload && m.contentPayload.header) {
+            // use instance method if available later; for now do a basic cleanup here
+            // we'll re-sanitize after class methods are defined
+            try {
+              // remove obvious doctor name tokens immediately
+              m.contentPayload.header = String(m.contentPayload.header).replace(/Dr\.?\s+[^\n\r\-]*/ig, '').trim();
+            } catch (e) {
+              // ignore
+            }
+          }
+        });
+      }
     } catch (e) {
-      console.warn('Could not sanitize message headers on startup:', e?.message || e);
+      console.warn('Could not perform initial header cleanup on startup:', e?.message || e);
     }
+  }
+
+  // Sanitize a header string: remove doctor names, weekday tokens, extra punctuation
+  sanitizeHeader(header, messageId) {
+    if (!header) return header;
+    let s = String(header || '').trim();
+
+    try {
+      // Remove 'Dr. Name' occurrences
+      s = s.replace(/Dr\.?\s+[^\n\r\-]*/ig, '').trim();
+
+      // Remove weekday tokens like Mon, Monday, etc.
+      s = s.replace(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s*,?/ig, '').trim();
+
+      // Remove stray separators and normalize spaces
+      s = s.replace(/[\-:\s]+$/g, '').replace(/^[\-:\s]+/g, '').replace(/\s{2,}/g, ' ').trim();
+    } catch (e) {
+      // fallback to original header on errors
+      s = String(header || '').trim();
+    }
+
+    // If sanitization produced an empty header, fall back to known defaults for common messages
+    const defaults = {
+      msg_confirm_appointment: 'Confirm Your Appointment ✅',
+      msg_payment_link: 'Payment Required 💳',
+      msg_appointment_confirmed: 'Appointment Confirmed! 🎉',
+      msg_book_interactive: 'Book Your Appointment 📅',
+      msg_doctor_selection: 'Available Doctors 👩‍⚕️',
+      msg_welcome_interactive: 'Welcome to Hospital Services! 🏥',
+      msg_existing_patient_select: 'Existing Patients',
+      msg_lab_interactive: 'Laboratory Services 🧪',
+      msg_emergency: '🚨 Emergency Services'
+    };
+
+    if (!s || s.length === 0) {
+      return defaults[messageId] || String(header || '');
+    }
+
+    return s;
   }
 
   // Get all published messages
@@ -987,8 +1028,9 @@ class MessageLibraryService {
         };
 
         if (payload.header) {
-          // ensure header source is the sanitized contentPayload.header
-          interactive.header = { type: 'text', text: String(payload.header) };
+          // sanitize header at runtime and ensure header source is the sanitized contentPayload.header
+          const clean = this.sanitizeHeader(payload.header, messageEntry && messageEntry.messageId);
+          interactive.header = { type: 'text', text: String(clean) };
         }
         if (payload.footer) {
           interactive.footer = { text: payload.footer };
@@ -1108,6 +1150,11 @@ class MessageLibraryService {
       safeCopy = JSON.parse(JSON.stringify(messageData || {}));
     } catch (e) {
       safeCopy = Object.assign({}, messageData || {});
+    }
+
+    // sanitize header on any incoming message before storing
+    if (safeCopy && safeCopy.contentPayload && safeCopy.contentPayload.header) {
+      safeCopy.contentPayload.header = this.sanitizeHeader(safeCopy.contentPayload.header);
     }
 
     const newMessage = Object.assign({
