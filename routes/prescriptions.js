@@ -272,12 +272,15 @@ router.post('/send-labtest', async (req, res) => {
         }
       });
 
-  // Build personalized lab payment message with unique done button id
+  // Build personalized lab payment message with unique ids (timestamp + random suffix)
   const tsLab = Date.now();
-  const payNowLabButtonId = `btn_lab_pay_now_${tsLab}`;
-  const doneLabButtonId = `btn_payment_done_${tsLab}`;
+  const rndLab = Math.random().toString(36).slice(2,6);
+  const confirmLabMsgId = `msg_order_lab_${tsLab}_${rndLab}`;
+  const payMsgLabId = `msg_payment_lab_${tsLab}_${rndLab}`;
+  const payNowLabButtonId = `btn_lab_pay_now_${tsLab}_${rndLab}`;
+  const doneLabButtonId = `btn_payment_done_${tsLab}_${rndLab}`;
   const paymentPayloadLab = {
-    messageId: `msg_payment_lab_${tsLab}`,
+    messageId: payMsgLabId,
     name: 'Payment Required - Lab Test',
     type: 'interactive_button',
     status: 'published',
@@ -286,17 +289,20 @@ router.post('/send-labtest', async (req, res) => {
       body: `Please perform your payment to confirm the lab test:\n\n🧪 ${labTestName}\n\n[Payment Link: https://pay.hospital.com/abc123]`,
       footer: 'Secure payment powered by Razorpay',
       buttons: [
-        { buttonId: doneLabButtonId, title: '✅ Payment Completed', triggerId: `trigger_payment_done_${tsLab}`, nextAction: 'send_message', targetMessageId: confirmLabMsg.messageId },
+        { buttonId: doneLabButtonId, title: '✅ Payment Completed', triggerId: `trigger_payment_done_${tsLab}_${rndLab}`, nextAction: 'send_message', targetMessageId: confirmLabMsgId },
         { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' },
         { buttonId: 'btn_cancel_payment', title: '❌ Cancel', triggerId: 'trigger_cancel_payment', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
       ]
     }
   };
 
-  const addedPaymentMsgLab = messageLibraryService.addMessage({ name: paymentPayloadLab.name, type: paymentPayloadLab.type, status: paymentPayloadLab.status, contentPayload: paymentPayloadLab.contentPayload });
+  // Ensure confirmLabMsg has an explicit messageId
+  const confirmLabMsgEntry = messageLibraryService.addMessage({ messageId: confirmLabMsgId, name: 'Lab Booking Confirmed', type: 'interactive_button', status: 'published', contentPayload: confirmLabMsg.contentPayload });
+
+  const addedPaymentMsgLab = messageLibraryService.addMessage({ messageId: paymentPayloadLab.messageId, name: paymentPayloadLab.name, type: paymentPayloadLab.type, status: paymentPayloadLab.status, contentPayload: paymentPayloadLab.contentPayload });
 
   const dynamicTriggerPayNowLab = {
-    triggerId: `trigger_lab_pay_now_${tsLab}`,
+    triggerId: `trigger_lab_pay_now_${tsLab}_${rndLab}`,
     triggerType: 'button_click',
     triggerValue: payNowLabButtonId,
     nextAction: 'send_message',
@@ -307,12 +313,12 @@ router.post('/send-labtest', async (req, res) => {
   };
 
   const dynamicTriggerDoneLab = {
-    triggerId: `trigger_payment_done_${tsLab}`,
+    triggerId: `trigger_payment_done_${tsLab}_${rndLab}`,
     triggerType: 'button_click',
     triggerValue: doneLabButtonId,
     nextAction: 'send_message',
-    targetId: confirmLabMsg.messageId,
-    messageId: confirmLabMsg.messageId,
+    targetId: confirmLabMsgEntry.messageId,
+    messageId: confirmLabMsgEntry.messageId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
