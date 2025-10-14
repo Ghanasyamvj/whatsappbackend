@@ -634,12 +634,16 @@ class MessageLibraryService {
 
   // Get all published messages
   getPublishedMessages() {
-    return this.messages.filter(msg => msg.status === 'published');
+    // return deep-cloned copies so callers cannot mutate the in-memory templates
+    return this.messages
+      .filter(msg => msg.status === 'published')
+      .map(msg => JSON.parse(JSON.stringify(msg)));
   }
 
   // Get message by ID
   getMessageById(messageId) {
-    return this.messages.find(msg => msg.messageId === messageId);
+    const found = this.messages.find(msg => msg.messageId === messageId);
+    return found ? JSON.parse(JSON.stringify(found)) : null;
   }
 
   // Find matching triggers for a message
