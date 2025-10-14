@@ -739,6 +739,12 @@ class MessageLibraryService {
     } catch (err) {
       console.error('Error enriching messageEntry with dynamic data:', err);
     }
+    // Work on a deep-cloned copy to avoid mutating in-memory templates
+    try {
+      messageEntry = JSON.parse(JSON.stringify(messageEntry));
+    } catch (e) {
+      // if cloning fails, proceed with original (should be rare)
+    }
     // If this is the confirm appointment template, force the header to the static confirm header
     try {
       if (messageEntry && messageEntry.messageId === 'msg_confirm_appointment') {
@@ -853,7 +859,7 @@ class MessageLibraryService {
             try {
               const dt = new Date(pending.bookingTime);
               if (!isNaN(dt.getTime())) {
-                const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
                 slotDate = `${dt.getDate()} ${monthNames[dt.getMonth()]} ${dt.getFullYear()}`;
               }
             } catch (err) {
