@@ -91,27 +91,38 @@ router.post('/send', async (req, res) => {
 
       // Build personalized payment message with a unique 'payment done' button id so it maps to the confirmation above
         const ts = Date.now();
-        const doneButtonId = `btn_payment_done_${ts}`;
         const payNowButtonId = `btn_prescription_pay_now_${ts}`;
-      const paymentPayload = {
+        const proceedPayBtn = `btn_proceed_pay_${ts}`;
+        const deletePayBtn = `btn_delete_pay_${ts}`;
+        const paymentPayload = {
         messageId: `msg_payment_pres_${ts}`,
         name: 'Payment Required - Prescription',
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
           header: '💳 Payment Required',
-          body: `Please complete your payment to confirm the prescription:\n\n💊 ${medicineName} - ${dosage} (${frequency})\n📅 Duration: ${duration} days\n\n[Payment Link: https://pay.hospital.com/abc123]`,
+            body: `Please complete your payment to confirm the prescription:\n\n💊 ${medicineName} - ${dosage} (${frequency})\n📅 Duration: ${duration} days\n\n[Payment Link: https://pay.hospital.com/abc123]`,
           footer: 'Secure payment powered by Razorpay',
           buttons: [
-            { buttonId: doneButtonId, title: '✅ Payment Completed', triggerId: `trigger_payment_done_${ts}`, nextAction: 'send_message', targetMessageId: confirmMedicineMsg.messageId },
-            { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' },
-            { buttonId: 'btn_cancel_payment', title: '❌ Cancel', triggerId: 'trigger_cancel_payment', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
+              { buttonId: proceedPayBtn, title: '➡️ Proceed to Payment', triggerId: `trigger_proceed_pay_${ts}`, nextAction: 'send_message', targetMessageId: confirmMedicineMsg.messageId },
+              { buttonId: deletePayBtn, title: '🗑️ Delete Payment', triggerId: `trigger_delete_pay_${ts}`, nextAction: 'send_message', targetMessageId: `msg_payment_cancelled_${ts}` },
+              { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' }
           ]
         }
       };
 
       // Add the personalized payment message to the in-memory message library so it can be sent on trigger
       const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
+
+      // Ensure the delete button points to the actual cancelled message id (avoid string mismatch)
+      try {
+        if (addedPaymentMsg && addedPaymentMsg.contentPayload && Array.isArray(addedPaymentMsg.contentPayload.buttons)) {
+          const delBtn = addedPaymentMsg.contentPayload.buttons.find(b => b.buttonId === deletePayBtn);
+          if (delBtn) delBtn.targetMessageId = cancelledMsg.messageId;
+        }
+      } catch (e) {
+        console.warn('Could not patch delete button target for prescription payment message:', e?.message || e);
+      }
 
       // Create an intermediate "Payment Received" message (processing) which will be
       // shown immediately after the user clicks Payment Completed. From there the
@@ -142,55 +153,39 @@ router.post('/send', async (req, res) => {
         updatedAt: new Date().toISOString()
       };
 
-      // Register dynamic trigger so clicking the unique payment-done button in the personalized
-      // payment message maps to the intermediate processing message. The processing message
-      // will have a "Proceed" button which will map to the final Order Placed message.
-      const dynamicTriggerDone = {
-        triggerId: `trigger_payment_done_${ts}`,
+      // Register dynamic trigger so clicking the unique 'Proceed' or 'Delete' buttons performs the right actions
+      const dynamicTriggerProceed = {
+        triggerId: `trigger_proceed_pay_${ts}`,
         triggerType: 'button_click',
-        triggerValue: doneButtonId,
+        triggerValue: proceedPayBtn,
         nextAction: 'send_message',
-        targetId: confirmProcessingMsg.messageId,
-        messageId: confirmProcessingMsg.messageId,
+        targetId: confirmMedicineMsg.messageId,
+        messageId: confirmMedicineMsg.messageId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
-      // Add a dedicated Proceed button on the processing message which maps to the final confirmation
-      const proceedButtonId = `btn_proceed_order_${ts}`;
-      const proceedTriggerId = `trigger_proceed_order_${ts}`;
-      // mutate the processing message contentPayload to add the proceed button
-      try {
-        if (confirmProcessingMsg && confirmProcessingMsg.contentPayload) {
-          confirmProcessingMsg.contentPayload.buttons = [
-            {
-              buttonId: proceedButtonId,
-              title: '➡️ Proceed to Order',
-              triggerId: proceedTriggerId,
-              nextAction: 'send_message',
-              targetMessageId: confirmMedicineMsg.messageId
-            },
-            {
-              buttonId: 'btn_main_menu',
-              title: '🏠 Main Menu',
-              triggerId: 'trigger_main_menu',
-              nextAction: 'send_message',
-              targetMessageId: 'msg_welcome_interactive'
-            }
-          ];
+      const cancelledMsg = messageLibraryService.addMessage({
+        name: 'Payment Cancelled',
+        type: 'interactive_button',
+        status: 'published',
+        contentPayload: {
+          header: 'Payment Cancelled ❌',
+          body: `Your payment has been cancelled for ${medicineName}. If this was a mistake you can request a new prescription.`,
+          footer: 'Payment cancelled',
+          buttons: [
+            { buttonId: 'btn_main_menu', title: '🏠 Main Menu', triggerId: 'trigger_main_menu', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
+          ]
         }
-      } catch (e) {
-        console.warn('Could not add proceed button to processing message:', e?.message || e);
-      }
+      });
 
-      // Register the proceed trigger that maps the proceed button to the final confirmation
-      const dynamicTriggerProceed = {
-        triggerId: proceedTriggerId,
+      const dynamicTriggerDelete = {
+        triggerId: `trigger_delete_pay_${ts}`,
         triggerType: 'button_click',
-        triggerValue: proceedButtonId,
+        triggerValue: deletePayBtn,
         nextAction: 'send_message',
-        targetId: confirmMedicineMsg.messageId,
-        messageId: confirmMedicineMsg.messageId,
+        targetId: cancelledMsg.messageId,
+        messageId: cancelledMsg.messageId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -208,9 +203,10 @@ router.post('/send', async (req, res) => {
       }
 
       // Unshift both triggers so they take precedence over global/default triggers.
-      messageLibraryService.triggers.unshift(dynamicTriggerProceed);
-      messageLibraryService.triggers.unshift(dynamicTriggerDone);
-      messageLibraryService.triggers.unshift(dynamicTriggerPayNow);
+  // register triggers in order: delete, proceed, payNow (so payNow appears first in handling)
+  messageLibraryService.triggers.unshift(dynamicTriggerDelete);
+  messageLibraryService.triggers.unshift(dynamicTriggerProceed);
+  messageLibraryService.triggers.unshift(dynamicTriggerPayNow);
     } catch (err) {
       console.error('Failed to register personalized payment message/trigger:', err);
     }
@@ -325,6 +321,8 @@ router.post('/send-labtest', async (req, res) => {
   const tsLab = Date.now();
   const doneLabButtonId = `btn_payment_done_${tsLab}`;
   const payNowLabButtonId = `btn_lab_pay_now_${tsLab}`;
+      const proceedLabBtn = `btn_proceed_lab_${tsLab}`;
+      const deleteLabBtn = `btn_delete_lab_${tsLab}`;
       const paymentPayload = {
         messageId: `msg_payment_lab_${tsLab}`,
         name: 'Payment Required - Lab Test',
@@ -335,14 +333,24 @@ router.post('/send-labtest', async (req, res) => {
           body: `Please complete your payment to confirm the lab test:\n\n🧪 ${labTestName}\n\n[Payment Link: https://pay.hospital.com/abc123]`,
           footer: 'Secure payment powered by Razorpay',
           buttons: [
-            { buttonId: doneLabButtonId, title: '✅ Payment Completed', triggerId: `trigger_payment_done_${tsLab}`, nextAction: 'send_message', targetMessageId: confirmLabMsg.messageId },
-            { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' },
-            { buttonId: 'btn_cancel_payment', title: '❌ Cancel', triggerId: 'trigger_cancel_payment', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
+            { buttonId: proceedLabBtn, title: '➡️ Proceed to Payment', triggerId: `trigger_proceed_lab_${tsLab}`, nextAction: 'send_message', targetMessageId: confirmLabMsg.messageId },
+            { buttonId: deleteLabBtn, title: '🗑️ Delete Payment', triggerId: `trigger_delete_lab_${tsLab}`, nextAction: 'send_message', targetMessageId: `msg_payment_cancelled_lab_${tsLab}` },
+            { buttonId: 'btn_payment_help', title: '❓ Payment Help', triggerId: 'trigger_payment_help', nextAction: 'send_message', targetMessageId: 'msg_payment_support' }
           ]
         }
       };
 
       const addedPaymentMsg = messageLibraryService.addMessage({ name: paymentPayload.name, type: paymentPayload.type, status: paymentPayload.status, contentPayload: paymentPayload.contentPayload });
+
+      // Ensure the delete button on the lab payment message points to the cancelled lab message id
+      try {
+        if (addedPaymentMsg && addedPaymentMsg.contentPayload && Array.isArray(addedPaymentMsg.contentPayload.buttons)) {
+          const delBtnLab = addedPaymentMsg.contentPayload.buttons.find(b => b.buttonId === deleteLabBtn);
+          if (delBtnLab) delBtnLab.targetMessageId = cancelledLabMsg.messageId;
+        }
+      } catch (e) {
+        console.warn('Could not patch delete button target for lab payment message:', e?.message || e);
+      }
 
       const dynamicTriggerPayNowLab = {
         triggerId: `trigger_lab_pay_now_${tsLab}`,
@@ -351,6 +359,32 @@ router.post('/send-labtest', async (req, res) => {
         nextAction: 'send_message',
         targetId: addedPaymentMsg.messageId,
         messageId: addedPaymentMsg.messageId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Register proceed/delete/cancel triggers for lab
+      const cancelledLabMsg = messageLibraryService.addMessage({
+        name: 'Payment Cancelled - Lab',
+        type: 'interactive_button',
+        status: 'published',
+        contentPayload: {
+          header: 'Payment Cancelled ❌',
+          body: `Your payment for ${labTestName} has been cancelled. If this was a mistake you can request a new booking.`,
+          footer: 'Payment cancelled',
+          buttons: [
+            { buttonId: 'btn_main_menu', title: '🏠 Main Menu', triggerId: 'trigger_main_menu', nextAction: 'send_message', targetMessageId: 'msg_welcome_interactive' }
+          ]
+        }
+      });
+
+      const dynamicTriggerDeleteLab = {
+        triggerId: `trigger_delete_lab_${tsLab}`,
+        triggerType: 'button_click',
+        triggerValue: deleteLabBtn,
+        nextAction: 'send_message',
+        targetId: cancelledLabMsg.messageId,
+        messageId: cancelledLabMsg.messageId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -377,8 +411,21 @@ router.post('/send-labtest', async (req, res) => {
         console.warn('Could not wire unique pay now button id to interactiveLabPrescription:', e?.message || e);
       }
 
-      // Unshift so custom triggers are checked first
-      messageLibraryService.triggers.unshift(dynamicTriggerDoneLab);
+      // Register the proceed trigger for lab which maps to the final confirmation
+      const dynamicTriggerProceedLab = {
+        triggerId: `trigger_proceed_lab_${tsLab}`,
+        triggerType: 'button_click',
+        triggerValue: proceedLabBtn,
+        nextAction: 'send_message',
+        targetId: confirmLabMsg.messageId,
+        messageId: confirmLabMsg.messageId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Unshift so custom triggers are checked first: delete, proceed, payNow
+      messageLibraryService.triggers.unshift(dynamicTriggerDeleteLab);
+      messageLibraryService.triggers.unshift(dynamicTriggerProceedLab);
       messageLibraryService.triggers.unshift(dynamicTriggerPayNowLab);
     } catch (err) {
       console.error('Failed to register lab personalized payment message/trigger:', err);
