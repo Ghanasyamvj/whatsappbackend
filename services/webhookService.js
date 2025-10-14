@@ -780,7 +780,12 @@ async function handleInteractiveResponse(message) {
       // Handle Proceed button after payment processing: finalize booking
       // We intentionally do NOT finalize on raw payment-done button clicks to avoid collisions.
       // Finalization occurs only when a dedicated 'proceed' button is clicked.
-      if ((trigger.triggerId && trigger.triggerId.startsWith && trigger.triggerId.startsWith('trigger_proceed_')) || (trigger.triggerValue && trigger.triggerValue.startsWith && trigger.triggerValue.startsWith('btn_proceed_'))) {
+      if (
+        (trigger.triggerId && trigger.triggerId.startsWith && trigger.triggerId.startsWith('trigger_proceed_')) ||
+        (trigger.triggerValue && trigger.triggerValue.startsWith && trigger.triggerValue.startsWith('btn_proceed_')) ||
+        (trigger.triggerId && trigger.triggerId.startsWith && trigger.triggerId.startsWith('trigger_payment_done_')) ||
+        (trigger.triggerValue && trigger.triggerValue.startsWith && trigger.triggerValue.startsWith('btn_payment_done_'))
+      ) {
         try {
           const pending = await bookingService.getPendingBookingForUser(message.from);
           if (!pending) {
