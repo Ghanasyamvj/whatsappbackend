@@ -464,7 +464,7 @@ async function handleInteractiveResponse(message) {
               if (doctorName) {
                 confirmToSend.contentPayload = confirmToSend.contentPayload || {};
                 // Use a static header and ensure doctor's name appears in the body
-                confirmToSend.contentPayload.header = 'Appointment Confirmation';
+                confirmToSend.contentPayload.header = 'Confirm Your Appointment ✅';
                 if (confirmToSend.contentPayload.body) {
                   try {
                     if (/Dr\.?\s+[^\n\r]*/i.test(String(confirmToSend.contentPayload.body))) {
@@ -637,7 +637,7 @@ async function handleInteractiveResponse(message) {
               const confirmToSend = JSON.parse(JSON.stringify(confirmMsg));
               if (doctorName) {
                 confirmToSend.contentPayload = confirmToSend.contentPayload || {};
-                confirmToSend.contentPayload.header = 'Appointment Confirmation';
+                confirmToSend.contentPayload.header = 'Confirm Your Appointment ✅';
                 if (confirmToSend.contentPayload.body) {
                   try {
                     if (/Dr\.?\s+[^\n\r]*/i.test(String(confirmToSend.contentPayload.body))) {
@@ -791,7 +791,7 @@ async function handleInteractiveResponse(message) {
                     const confirmToSend = JSON.parse(JSON.stringify(confirmMsg));
                     if (doctorName) {
                       confirmToSend.contentPayload = confirmToSend.contentPayload || {};
-                      confirmToSend.contentPayload.header = 'Appointment Confirmation';
+                      confirmToSend.contentPayload.header = 'Confirm Your Appointment ✅';
                       if (confirmToSend.contentPayload.body) {
                         try {
                           if (/Dr\.?\s+[^\n\r]*/i.test(String(confirmToSend.contentPayload.body))) {

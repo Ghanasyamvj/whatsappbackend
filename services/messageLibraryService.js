@@ -630,6 +630,24 @@ class MessageLibraryService {
         updatedAt: new Date().toISOString()
       }
     ];
+
+    // Sanitization: ensure important templates have correct static headers
+    try {
+      const ensureHeader = (id, header) => {
+        const m = this.messages.find(x => x.messageId === id);
+        if (m && m.contentPayload) {
+          m.contentPayload.header = header;
+        }
+      };
+  ensureHeader('msg_confirm_appointment', 'Confirm Your Appointment ✅');
+  ensureHeader('msg_payment_link', 'Payment Required 💳');
+  ensureHeader('msg_appointment_confirmed', 'Appointment Confirmed! 🎉');
+  // Also ensure booking flow and doctor selection headers are correct
+  ensureHeader('msg_book_interactive', 'Book Your Appointment 📅');
+  ensureHeader('msg_doctor_selection', 'Available Doctors 👩‍⚕️');
+    } catch (e) {
+      console.warn('Could not sanitize message headers on startup:', e?.message || e);
+    }
   }
 
   // Get all published messages
@@ -1067,13 +1085,20 @@ class MessageLibraryService {
 
   // Add a new message (for API integration)
   addMessage(messageData) {
-    const newMessage = {
+    // Clone incoming data to avoid storing references to external or mutated objects
+    let safeCopy;
+    try {
+      safeCopy = JSON.parse(JSON.stringify(messageData || {}));
+    } catch (e) {
+      safeCopy = Object.assign({}, messageData || {});
+    }
+
+    const newMessage = Object.assign({
       messageId: `msg_${Date.now()}`,
-      ...messageData,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    };
-    
+    }, safeCopy);
+
     this.messages.push(newMessage);
     return newMessage;
   }
