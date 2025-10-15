@@ -958,10 +958,24 @@ class MessageLibraryService {
             try {
               const bodyText = messageEntry.contentPayload && messageEntry.contentPayload.body ? String(messageEntry.contentPayload.body) : '';
               const headerText = messageEntry.contentPayload && messageEntry.contentPayload.header ? String(messageEntry.contentPayload.header) : '';
-              const found = (bodyText + '\n' + headerText).match(/Dr\.?\s+[A-Z][a-zA-Z\-']{1,50}/i);
+              // Primary: look for explicit 'Dr. Name' patterns
+              let found = (bodyText + '\n' + headerText).match(/Dr\.?\s+[A-Z][a-zA-Z\-']{1,50}(?:\s+[A-Z][a-zA-Z\-']{1,50})*/i);
               if (found) {
                 doctorName = found[0].trim();
-                console.log('ℹ️ Extracted doctorName from messageEntry content:', doctorName);
+                console.log('ℹ️ Extracted doctorName from messageEntry content (Dr. pattern):', doctorName);
+              } else {
+                // Secondary: look for a short capitalized name line (e.g., 'Sharma' or 'John Doe') in body lines
+                const lines = (bodyText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                for (const ln of lines) {
+                  // skip lines that look like labels or contain punctuation
+                  if (/[:\-\d\/]/.test(ln)) continue;
+                  // Accept 1-3 word capitalized names
+                  if (/^[A-Z][a-zA-Z\-']{1,40}(?:\s+[A-Z][a-zA-Z\-']{1,40}){0,2}$/.test(ln)) {
+                    doctorName = /^Dr\.?/i.test(ln) ? ln : `Dr. ${ln}`;
+                    console.log('ℹ️ Inferred doctorName from body line heuristic:', doctorName, 'from line:', ln);
+                    break;
+                  }
+                }
               }
             } catch (e) { /* ignore */ }
           }
