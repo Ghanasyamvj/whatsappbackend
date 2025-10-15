@@ -227,7 +227,7 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Confirm Your Appointment ✅',
-          body: 'Appointment Details:\n\n🩺 {{doctorName}}\n📅 {{slotDate}}\n⏰ Time: {{slotTime}}\n💰 Fee: ₹750\n\nPlease confirm to complete your booking and proceed to payment.',
+        body: 'Appointment Details:\n\n🩺 {{doctorName}}\n📅 25 Oct 2025\n⏰ Time: {{slotTime}}\n💰 Fee: ₹750\n\nPlease confirm to complete your booking and proceed to payment.',
           footer: 'Need to change your appointment? Use Reschedule',
           buttons: [
             {
@@ -631,24 +631,24 @@ class MessageLibraryService {
       }
     ];
 
-    // Sanitization: apply a general header sanitizer to every message header on startup
+    // Sanitization: normalize every message header on startup using the sanitizeHeader helper
     try {
       if (this.messages && Array.isArray(this.messages)) {
         this.messages.forEach(m => {
-          if (m && m.contentPayload && m.contentPayload.header) {
-            // use instance method if available later; for now do a basic cleanup here
-            // we'll re-sanitize after class methods are defined
+          if (m && m.contentPayload) {
             try {
-              // remove obvious doctor name tokens immediately
-              m.contentPayload.header = String(m.contentPayload.header).replace(/Dr\.?\s+[^\n\r\-]*/ig, '').trim();
+              m.contentPayload.header = this.sanitizeHeader(m.contentPayload.header, m.messageId);
             } catch (e) {
-              // ignore
+              // fallback: basic cleanup
+              try {
+                m.contentPayload.header = String(m.contentPayload.header || '').replace(/Dr\.?\s+[^\n\r\-]*/ig, '').trim();
+              } catch (err) {}
             }
           }
         });
       }
     } catch (e) {
-      console.warn('Could not perform initial header cleanup on startup:', e?.message || e);
+      console.warn('Could not perform initial header sanitization on startup:', e?.message || e);
     }
   }
 
@@ -1025,6 +1025,15 @@ class MessageLibraryService {
       if (messageEntry && messageEntry.messageId === 'msg_doctor_selection') {
         messageEntry.contentPayload = messageEntry.contentPayload || {};
         messageEntry.contentPayload.header = 'Available Doctors 👩‍⚕️';
+      }
+      // Ensure payment and confirmation headers are enforced too
+      if (messageEntry && messageEntry.messageId === 'msg_payment_link') {
+        messageEntry.contentPayload = messageEntry.contentPayload || {};
+        messageEntry.contentPayload.header = 'Payment Required 💳';
+      }
+      if (messageEntry && messageEntry.messageId === 'msg_appointment_confirmed') {
+        messageEntry.contentPayload = messageEntry.contentPayload || {};
+        messageEntry.contentPayload.header = 'Appointment Confirmed! 🎉';
       }
     } catch (e) {
       console.warn('Could not enforce runtime static headers for booking flow:', e?.message || e);
