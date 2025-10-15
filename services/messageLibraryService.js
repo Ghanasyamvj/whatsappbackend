@@ -816,7 +816,14 @@ class MessageLibraryService {
         // Attempt to inject selected doctor's name and slot/time from pending booking for this recipient
         try {
           const pending = await bookingService.getPendingBookingForUser(recipientPhone).catch(() => null);
-          const doctorName = pending && pending.meta && pending.meta.doctorName ? pending.meta.doctorName : null;
+          let doctorName = pending && pending.meta && pending.meta.doctorName ? pending.meta.doctorName : null;
+          // fallback: if meta lacks doctorName, try resolving from pending.doctorId
+          if (!doctorName && pending && pending.doctorId) {
+            try {
+              const doc = await doctorService.getDoctorById(pending.doctorId).catch(() => null);
+              if (doc && doc.name) doctorName = doc.name;
+            } catch (e) { /* ignore */ }
+          }
           const rawSlot = pending && pending.meta && pending.meta.slotTitle ? pending.meta.slotTitle : (pending && pending.bookingTime ? pending.bookingTime : null);
 
           if (messageEntry.contentPayload.body) {
@@ -910,7 +917,14 @@ class MessageLibraryService {
     try {
       if (messageEntry && messageEntry.contentPayload) {
         const pending = await bookingService.getPendingBookingForUser(recipientPhone).catch(() => null);
-        const doctorName = pending && pending.meta && pending.meta.doctorName ? pending.meta.doctorName : null;
+        let doctorName = pending && pending.meta && pending.meta.doctorName ? pending.meta.doctorName : null;
+        // fallback to pending.doctorId lookup when doctorName not present in meta
+        if (!doctorName && pending && pending.doctorId) {
+          try {
+            const doc = await doctorService.getDoctorById(pending.doctorId).catch(() => null);
+            if (doc && doc.name) doctorName = doc.name;
+          } catch (e) { /* ignore */ }
+        }
         const rawSlot = pending && pending.meta && pending.meta.slotTitle ? pending.meta.slotTitle : (pending && pending.bookingTime ? pending.bookingTime : null);
 
         let slotDate = '';
