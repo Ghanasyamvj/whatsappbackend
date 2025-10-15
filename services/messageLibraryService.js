@@ -1,6 +1,7 @@
 const axios = require('axios');
 const doctorService = require('./doctorService');
 const bookingService = require('./bookingService');
+const flowService = require('./flowService');
 const { db } = require('../config/firebase');
 
 // Message Library Integration Service
@@ -925,6 +926,45 @@ class MessageLibraryService {
             if (doc && doc.name) doctorName = doc.name;
           } catch (e) { /* ignore */ }
         }
+  // Additional fallback: try to infer doctorName from recent flow messages for this user
+        if (!doctorName) {
+          try {
+            const recent = await flowService.getMessagesByUser(recipientPhone).catch(() => []);
+            const doctorMatchRegex = /Dr\.?\s+([A-Z][a-zA-Z\-']{1,50})/;
+            for (const m of recent) {
+              const content = m.content;
+              if (!content) continue;
+              if (typeof content === 'string') {
+                const mm = content.match(doctorMatchRegex);
+                if (mm) { doctorName = `Dr. ${mm[1]}`; break; }
+              } else if (typeof content === 'object') {
+                const cp = content.contentPayload || content;
+                if (cp && cp.header && typeof cp.header === 'string') {
+                  const mm = String(cp.header).match(doctorMatchRegex);
+                  if (mm) { doctorName = `Dr. ${mm[1]}`; break; }
+                }
+                if (cp && cp.body && typeof cp.body === 'string') {
+                  const mm = String(cp.body).match(doctorMatchRegex);
+                  if (mm) { doctorName = `Dr. ${mm[1]}`; break; }
+                }
+              }
+            }
+            if (doctorName) console.log('ℹ️ Inferred doctorName from recent flow messages:', doctorName);
+          } catch (e) { /* ignore */ }
+        }
+
+          // Extra fallback: if still missing, try extracting from the messageEntry content (body or header)
+          if (!doctorName) {
+            try {
+              const bodyText = messageEntry.contentPayload && messageEntry.contentPayload.body ? String(messageEntry.contentPayload.body) : '';
+              const headerText = messageEntry.contentPayload && messageEntry.contentPayload.header ? String(messageEntry.contentPayload.header) : '';
+              const found = (bodyText + '\n' + headerText).match(/Dr\.?\s+[A-Z][a-zA-Z\-']{1,50}/i);
+              if (found) {
+                doctorName = found[0].trim();
+                console.log('ℹ️ Extracted doctorName from messageEntry content:', doctorName);
+              }
+            } catch (e) { /* ignore */ }
+          }
         const rawSlot = pending && pending.meta && pending.meta.slotTitle ? pending.meta.slotTitle : (pending && pending.bookingTime ? pending.bookingTime : null);
 
         let slotDate = '';
@@ -1001,6 +1041,17 @@ class MessageLibraryService {
             }
 
             messageEntry.contentPayload.body = finalBody;
+
+            // If we inferred a doctorName but pending.meta didn't have it, persist it back to pending booking
+            try {
+              if (doctorName && pending && (!pending.meta || !pending.meta.doctorName)) {
+                await bookingService.createPendingBooking(recipientPhone, { doctorId: pending && pending.doctorId, meta: { doctorName } }).catch(() => null);
+                console.log('ℹ️ Persisted inferred doctorName back to pending booking for', recipientPhone);
+              }
+            } catch (err) {
+              // non-fatal
+              console.warn('Could not persist inferred doctorName to pending booking:', err?.message || err);
+            }
           }
         } catch (err) {
           console.warn('Could not build deterministic confirm body:', err?.message || err);
