@@ -979,6 +979,52 @@ class MessageLibraryService {
               }
             } catch (e) { /* ignore */ }
           }
+
+          // Targeted fallback: look for the most recent 'Payment Required' / msg_payment_link message in the user's recent messages
+          if (!doctorName) {
+            try {
+              const recent = await flowService.getMessagesByUser(recipientPhone).catch(() => []);
+              let paymentMsg = null;
+              for (const m of recent) {
+                try {
+                  const content = m.content || m;
+                  // content may be an object with contentPayload or a string
+                  let cp = null;
+                  if (content && typeof content === 'object') cp = content.contentPayload || content;
+                  const header = cp && cp.header ? String(cp.header || '') : (typeof content === 'string' ? content : '');
+                  const body = cp && cp.body ? String(cp.body || '') : (typeof content === 'string' ? content : '');
+
+                  // Identify payment message by header or body or known messageId
+                  const isPayment = /payment required|payment link|payment/i.test(header) || /payment required|payment link|payment/i.test(body) || (m.messageId === 'msg_payment_link');
+                  if (isPayment) { paymentMsg = { header, body, raw: m }; break; }
+                } catch (e) { /* ignore per-message */ }
+              }
+
+              if (paymentMsg) {
+                // Try to extract doctor name from payment message body (look for emoji line '🩺 DoctorName' or Dr. pattern)
+                const pb = String(paymentMsg.body || '');
+                const ph = String(paymentMsg.header || '');
+                // prefer lines with '🩺'
+                const matchEmoji = pb.match(/🩺\s*(?:Dr\.?\s*)?([A-Z][a-zA-Z\-']+(?:\s+[A-Z][a-zA-Z\-']+)*)/i);
+                if (matchEmoji && matchEmoji[1]) {
+                  doctorName = `Dr. ${matchEmoji[1].trim()}`;
+                } else {
+                  const matchDr = (pb + '\n' + ph).match(/Dr\.?\s+[A-Z][a-zA-Z\-']{1,50}(?:\s+[A-Z][a-zA-Z\-']{1,50})*/i);
+                  if (matchDr) doctorName = matchDr[0].trim();
+                }
+
+                if (doctorName) {
+                  console.log('ℹ️ Extracted doctorName from recent payment message:', doctorName);
+                  // persist back to pending booking for consistency
+                  try {
+                    const pending = await bookingService.getPendingBookingForUser(recipientPhone).catch(() => null);
+                    await bookingService.createPendingBooking(recipientPhone, { doctorId: pending && pending.doctorId, meta: { doctorName } }).catch(() => null);
+                    console.log('ℹ️ Persisted doctorName from payment message into pending booking for', recipientPhone);
+                  } catch (e) { /* non-fatal */ }
+                }
+              }
+            } catch (err) { /* ignore */ }
+          }
         const rawSlot = pending && pending.meta && pending.meta.slotTitle ? pending.meta.slotTitle : (pending && pending.bookingTime ? pending.bookingTime : null);
 
         let slotDate = '';
