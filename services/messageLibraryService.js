@@ -298,8 +298,8 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Appointment Confirmed! 🎉',
-          body: 'Booking Confirmed:\n\n🎫 Token: GM-015\n🩺 {{doctorName}}\n📅 {{slotDate}}\n⏰ Time: {{slotTime}}\n🏥 Room 201, 2nd Floor\n\nPlease arrive 15 minutes before your appointment.',
+        header: 'Appointment Confirmed! 🎉',
+        body: 'Booking Confirmed:\n\n🎫 Token: GM-015\n🩺 {{doctorName}}\n📅 25 Oct 2025\n⏰ Time: {{slotTime}}\n🏥 Room 201, 2nd Floor\n\nPlease arrive 15 minutes before your appointment.',
           footer: 'Thank you for choosing our hospital',
           buttons: [
             {
@@ -943,9 +943,9 @@ class MessageLibraryService {
           }
         }
 
-        // For confirm appointment messages, build a deterministic body so stray tokens like 'Wed' are removed
+        // For confirm/confirmed appointment messages, build a deterministic body so stray tokens like 'Wed' are removed
         try {
-          if (messageEntry && messageEntry.messageId === 'msg_confirm_appointment') {
+          if (messageEntry && (messageEntry.messageId === 'msg_confirm_appointment' || messageEntry.messageId === 'msg_appointment_confirmed')) {
             // Ensure doctor name shows as 'Dr. Name' when possible
             let displayDoctor = doctorName || '';
             if (displayDoctor && !/^Dr\.?\s+/i.test(displayDoctor)) {
@@ -959,16 +959,32 @@ class MessageLibraryService {
             const feeMatch = (String(messageEntry.contentPayload && messageEntry.contentPayload.body || '')).match(/₹\s*\d+/);
             const feeDisplay = feeMatch ? feeMatch[0] : '₹750';
 
-            const finalBody = [
-              'Appointment Details:',
-              '',
-              `🩺 ${displayDoctor || 'Doctor'}`,
-              `📅 ${cleanedDate || '25 Oct 2025'}`,
-              `⏰ Time: ${slotTime || ''}`,
-              `💰 Fee: ${feeDisplay}`,
-              '',
-              'Please confirm to complete your booking and proceed to payment.'
-            ].join('\n');
+            let finalBody;
+            if (messageEntry.messageId === 'msg_confirm_appointment') {
+              finalBody = [
+                'Appointment Details:',
+                '',
+                `🩺 ${displayDoctor || 'Doctor'}`,
+                `📅 ${cleanedDate || '25 Oct 2025'}`,
+                `⏰ Time: ${slotTime || ''}`,
+                `💰 Fee: ${feeDisplay}`,
+                '',
+                'Please confirm to complete your booking and proceed to payment.'
+              ].join('\n');
+            } else {
+              // appointment confirmed message
+              finalBody = [
+                'Booking Confirmed:',
+                '',
+                `🎫 Token: GM-015`,
+                `🩺 ${displayDoctor || 'Doctor'}`,
+                `📅 ${cleanedDate || '25 Oct 2025'}`,
+                `⏰ Time: ${slotTime || ''}`,
+                `🏥 Room 201, 2nd Floor`,
+                '',
+                'Please arrive 15 minutes before your appointment.'
+              ].join('\n');
+            }
 
             messageEntry.contentPayload.body = finalBody;
           }
