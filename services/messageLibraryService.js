@@ -125,7 +125,7 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Book Your Appointment ',
-          body: 'Great! \nWhat kind of appointment would you like to book today?',
+          body: 'Great!\nWhat kind of appointment would you like to book today?',
           footer: 'Choose your department:',
           buttons: [
             {
