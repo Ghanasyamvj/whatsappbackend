@@ -835,7 +835,7 @@ class MessageLibraryService {
               if (/Dr\.?\s+[^\n\r]*/i.test(bodyStr)) {
                 bodyStr = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, doctorName);
               } else {
-                bodyStr = bodyStr.replace(/(^.*👨‍⚕️.*$)/im, doctorName);
+                bodyStr = bodyStr.replace(/(^.*.*$)/im, doctorName);
               }
             }
 
@@ -854,7 +854,7 @@ class MessageLibraryService {
               for (let i = 0; i < lines.length; i++) {
                 const l = lines[i];
                 // Replace date line (contains calendar emoji or '' or a month name)
-                if (!replacedDate && /📅|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(l)) {
+                if (!replacedDate && /|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(l)) {
                   lines[i] = datePart || slotStr;
                   replacedDate = true;
                   continue;
@@ -1078,10 +1078,10 @@ class MessageLibraryService {
               finalBody = [
                 'Appointment Details:',
                 '',
-                `🩺 ${displayDoctor || 'Doctor'}`,
-                `📅 ${cleanedDate || '25 Oct 2025'}`,
-                `⏰ Time: ${slotTime || ''}`,
-                `💰 Fee: ${feeDisplay}`,
+                ` ${displayDoctor || 'Doctor'}`,
+                ` ${cleanedDate || '25 Oct 2025'}`,
+                ` Time: ${slotTime || ''}`,
+                ` Fee: ${feeDisplay}`,
                 '',
                 'Please confirm to complete your booking and proceed to payment.'
               ].join('\n');
@@ -1090,11 +1090,11 @@ class MessageLibraryService {
               finalBody = [
                 'Booking Confirmed:',
                 '',
-                `🎫 Token: GM-015`,
-                `🩺 ${displayDoctor || 'Doctor'}`,
-                `📅 ${cleanedDate || '25 Oct 2025'}`,
-                `⏰ Time: ${slotTime || ''}`,
-                `🏥 Room 201, 2nd Floor`,
+                ` Token: GM-015`,
+                ` ${displayDoctor || 'Doctor'}`,
+                ` ${cleanedDate || '25 Oct 2025'}`,
+                ` Time: ${slotTime || ''}`,
+                ` Room 201, 2nd Floor`,
                 '',
                 'Please arrive 15 minutes before your appointment.'
               ].join('\n');
@@ -1106,7 +1106,7 @@ class MessageLibraryService {
             try {
               if (doctorName && pending && (!pending.meta || !pending.meta.doctorName)) {
                 await bookingService.createPendingBooking(recipientPhone, { doctorId: pending && pending.doctorId, meta: { doctorName } }).catch(() => null);
-                console.log('ℹ️ Persisted inferred doctorName back to pending booking for', recipientPhone);
+                console.log(' Persisted inferred doctorName back to pending booking for', recipientPhone);
               }
             } catch (err) {
               // non-fatal
@@ -1125,11 +1125,11 @@ class MessageLibraryService {
 
           // Remove empty labeled lines to avoid showing blank Date/Time lines
           if (!slotDate) {
-            out = out.replace(/(^|\n)\s*📅\s*Date:\s*\n?/g, '\n');
+            out = out.replace(/(^|\n)\s*\s*Date:\s*\n?/g, '\n');
             out = out.replace(/(^|\n)\s*Date:\s*\n?/g, '\n');
           }
           if (!slotTime) {
-            out = out.replace(/(^|\n)\s*⏰\s*Time:\s*\n?/g, '\n');
+            out = out.replace(/(^|\n)\s*\s*Time:\s*\n?/g, '\n');
             out = out.replace(/(^|\n)\s*Time:\s*\n?/g, '\n');
           }
 
@@ -1161,20 +1161,20 @@ class MessageLibraryService {
     try {
       if (messageEntry && messageEntry.messageId === 'msg_book_interactive') {
         messageEntry.contentPayload = messageEntry.contentPayload || {};
-        messageEntry.contentPayload.header = 'Book Your Appointment 📅';
+        messageEntry.contentPayload.header = 'Book Your Appointment ';
       }
       if (messageEntry && messageEntry.messageId === 'msg_doctor_selection') {
         messageEntry.contentPayload = messageEntry.contentPayload || {};
-        messageEntry.contentPayload.header = 'Available Doctors 👩‍⚕️';
+        messageEntry.contentPayload.header = 'Available Doctors ';
       }
       // Ensure payment and confirmation headers are enforced too
       if (messageEntry && messageEntry.messageId === 'msg_payment_link') {
         messageEntry.contentPayload = messageEntry.contentPayload || {};
-        messageEntry.contentPayload.header = 'Payment Required 💳';
+        messageEntry.contentPayload.header = 'Payment Required ';
       }
       if (messageEntry && messageEntry.messageId === 'msg_appointment_confirmed') {
         messageEntry.contentPayload = messageEntry.contentPayload || {};
-        messageEntry.contentPayload.header = 'Appointment Confirmed! 🎉';
+        messageEntry.contentPayload.header = 'Appointment Confirmed! ';
       }
     } catch (e) {
       console.warn('Could not enforce runtime static headers for booking flow:', e?.message || e);
@@ -1316,11 +1316,11 @@ class MessageLibraryService {
         }
       });
 
-      console.log('✅ Message sent successfully:', response.data);
+      console.log(' Message sent successfully:', response.data);
       return { success: true, data: response.data };
 
     } catch (error) {
-      console.error('❌ Failed to send message:', error.response?.data || error.message);
+      console.error(' Failed to send message:', error.response?.data || error.message);
       throw new Error(`Failed to send message: ${error.response?.data?.error?.message || error.message}`);
     }
   }
