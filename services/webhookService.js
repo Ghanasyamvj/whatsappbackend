@@ -653,6 +653,11 @@ async function handleInteractiveResponse(message) {
             } catch (error) {
               console.error('❌ Failed to send confirm appointment with injected doctor name:', error.message);
             }
+          } else if (result.nextMessage && result.nextMessage.messageId === 'msg_doctor_selection') {
+            // Doctor selection message - send it directly
+            console.log(`📤 Sending doctor selection message to ${message.from}`);
+            await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
+            console.log(`✅ Successfully sent doctor selection message to ${message.from}`);
           } else {
             console.log(`📤 Sending next message: "${result.nextMessage.name}" to ${message.from}`);
             await messageLibraryService.sendLibraryMessage(result.nextMessage, message.from);
