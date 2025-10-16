@@ -17,7 +17,7 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Welcome to Hospital Services! ',
+          header: 'Welcome to Daya Hospital Services! ',
           body: 'Hello! How can we assist you today? Please choose an option below:',
           footer: 'Powered by Hospital Management System',
           buttons: [
@@ -125,8 +125,8 @@ class MessageLibraryService {
         status: 'published',
         contentPayload: {
           header: 'Book Your Appointment ',
-          body: 'Here’s a list of our available doctors — pick the one you’d like to consult with ',
-          footer: 'Choose your doctor:',
+          body: 'Great! \nWhat kind of appointment would you like to book today?',
+          footer: 'Choose your department:',
           buttons: [
             {
               buttonId: 'btn_general_checkup',
@@ -156,7 +156,7 @@ class MessageLibraryService {
         contentPayload: {
           header: 'Alright! Let’s get you the right doctor.',
           body: 'Please select a doctor for your appointment:',
-          footer: 'All doctors are available for booking',
+          footer: 'Here’s a list of our available doctors — pick the one you’d like to consult with ',
           buttonText: 'Choose Doctor',
           sections: [
             {
