@@ -674,12 +674,12 @@ class MessageLibraryService {
 
     // If sanitization produced an empty header, fall back to known defaults for common messages
     const defaults = {
-      msg_confirm_appointment: 'Confirm Your Appointment ',
-      msg_payment_link: 'Payment Required ',
-      msg_appointment_confirmed: 'Appointment Confirmed! ',
-      msg_book_interactive: 'Book Your Appointment ',
-      msg_doctor_selection: 'Available Doctors ',
-      msg_welcome_interactive: 'Welcome to Hospital Services! ',
+      msg_confirm_appointment: 'Confirm Your Appointment',
+      msg_payment_link: 'Payment Required',
+      msg_appointment_confirmed: 'Appointment Confirmed!',
+      msg_book_interactive: 'Book Your Appointment',
+      msg_doctor_selection: 'Available Doctors',
+      msg_welcome_interactive: 'Welcome to Hospital Services!',
       msg_existing_patient_select: 'Existing Patients',
       msg_lab_interactive: 'Laboratory Services ',
       msg_emergency: ' Emergency Services'
