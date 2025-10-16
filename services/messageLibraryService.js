@@ -156,7 +156,7 @@ class MessageLibraryService {
         contentPayload: {
           header: 'Alright! Let’s get you the right doctor.',
           body: 'Please select a doctor for your appointment:',
-          footer: 'Here’s a list of our available doctors — pick the one you’d like to consult with ',
+          footer: 'pick the one you’d like to consult with ',
           buttonText: 'Choose Doctor',
           sections: [
             {
