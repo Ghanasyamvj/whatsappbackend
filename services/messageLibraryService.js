@@ -17,27 +17,27 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Welcome to Hospital Services! 🏥',
+          header: 'Welcome to Hospital Services! ',
           body: 'Hello! How can we assist you today? Please choose an option below:',
           footer: 'Powered by Hospital Management System',
           buttons: [
             {
               buttonId: 'btn_book_appointment',
-              title: '📅 Book Appointment',
+              title: ' Book Appointment',
               triggerId: 'trigger_book_appointment',
               nextAction: 'send_message',
               targetMessageId: 'msg_book_interactive'
             },
             {
               buttonId: 'btn_lab_tests',
-              title: '🧪 Lab Tests',
+              title: ' Lab Tests',
               triggerId: 'trigger_lab_tests',
               nextAction: 'send_message',
               targetMessageId: 'msg_lab_interactive'
             },
             {
               buttonId: 'btn_emergency',
-              title: '🚨 Emergency',
+              title: ' Emergency',
               triggerId: 'trigger_emergency',
               nextAction: 'send_message',
               targetMessageId: 'msg_emergency'
@@ -45,7 +45,7 @@ class MessageLibraryService {
             ,
             {
               buttonId: 'btn_checkin',
-              title: "📍 I've arrived",
+              title: " I've arrived",
               triggerId: 'trigger_checkin',
               nextAction: 'mark_arrived',
               targetMessageId: null
@@ -124,13 +124,13 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Book Your Appointment 📅',
-          body: 'Which type of appointment would you like to book?',
-          footer: 'Select your preferred option',
+          header: 'Book Your Appointment ',
+          body: 'Here’s a list of our available doctors — pick the one you’d like to consult with ',
+          footer: 'Choose your doctor:',
           buttons: [
             {
               buttonId: 'btn_general_checkup',
-              title: '👩‍⚕️ General Checkup',
+              title: ' General Checkup',
               triggerId: 'trigger_general_checkup',
               nextAction: 'send_message',
               targetMessageId: 'msg_doctor_selection'
@@ -138,7 +138,7 @@ class MessageLibraryService {
             // Specialist option removed per request
             {
               buttonId: 'btn_back_main',
-              title: '⬅️ Back to Main',
+              title: ' Back to Main',
               triggerId: 'trigger_back_main',
               nextAction: 'send_message',
               targetMessageId: 'msg_welcome_interactive'
@@ -154,7 +154,7 @@ class MessageLibraryService {
         type: 'interactive_list',
         status: 'published',
         contentPayload: {
-          header: 'Available Doctors 👩‍⚕️',
+          header: 'Alright! Let’s get you the right doctor.',
           body: 'Please select a doctor for your appointment:',
           footer: 'All doctors are available for booking',
           buttonText: 'Choose Doctor',
@@ -191,27 +191,27 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Dr. Sharma - Available Slots 📅',
-          body: 'Please select your preferred time slot:',
+          header: 'Dr. Sharma - Available Slots ',
+          body: 'When would you like to visit?\nPlease select a time slot that works best for you',
           footer: 'Consultation fee: ₹750',
           buttons: [
             {
               buttonId: 'btn_slot_930',
-              title: '🕘 Mon 9:30 AM',
+              title: ' Mon 9:30 AM',
               triggerId: 'trigger_slot_930',
               nextAction: 'send_message',
               targetMessageId: 'msg_confirm_appointment'
             },
             {
               buttonId: 'btn_slot_4pm',
-              title: '🕐 Wed 4:00 PM',
+              title: 'Wed 4:00 PM',
               triggerId: 'trigger_slot_4pm',
               nextAction: 'send_message',
               targetMessageId: 'msg_confirm_appointment'
             },
             {
               buttonId: 'btn_back_doctors',
-              title: '⬅️ Back to Doctors',
+              title: ' Back to Doctors',
               triggerId: 'trigger_back_doctors',
               nextAction: 'send_message',
               targetMessageId: 'msg_doctor_selection'
@@ -227,27 +227,27 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Confirm Your Appointment ✅',
-        body: 'Appointment Details:\n\n🩺 {{doctorName}}\n📅 25 Oct 2025\n⏰ Time: {{slotTime}}\n💰 Fee: ₹750\n\nPlease confirm to complete your booking and proceed to payment.',
+          header: 'Confirm Your Appointment ',
+        body: 'Appointment Details:\n\n {{doctorName}}\n 25 Oct 2025\n Time: {{slotTime}}\n Fee: ₹750\n\nPlease confirm to complete your booking and proceed to payment.',
           footer: 'Need to change your appointment? Use Reschedule',
           buttons: [
             {
               buttonId: 'btn_confirm_pay',
-              title: '✅ Confirm & Pay',
+              title: ' Confirm & Pay',
               triggerId: 'trigger_confirm_pay',
               nextAction: 'send_message',
               targetMessageId: 'msg_payment_link'
             },
             {
               buttonId: 'btn_reschedule',
-              title: '🔄 Reschedule',
+              title: ' Reschedule',
               triggerId: 'trigger_reschedule',
               nextAction: 'send_message',
               targetMessageId: 'msg_sharma_slots_interactive'
             },
             {
               buttonId: 'btn_cancel',
-              title: '❌ Cancel',
+              title: ' Cancel',
               triggerId: 'trigger_cancel',
               nextAction: 'send_message',
               targetMessageId: 'msg_welcome_interactive'
@@ -263,27 +263,27 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: 'Payment Required 💳',
-          body: 'Payment Details:\n\n💰 Amount: ₹750\n🩺 {{doctorName}}\n📅 {{slotDate}}\n⏰ Time: {{slotTime}}\n\nPlease complete payment here: https://pay.hospital.com/abc123',
+          header: 'Payment Required ',
+          body: 'Payment Details:\n\n Amount: ₹750\n {{doctorName}}\n {{slotDate}}\n Time: {{slotTime}}\n\nPlease complete payment here: https://pay.hospital.com/abc123',
           footer: 'Secure payment powered by Razorpay',
           buttons: [
             {
               buttonId: 'btn_payment_done',
-              title: '✅ Payment Completed',
+              title: ' Payment Completed',
               triggerId: 'trigger_payment_done',
               nextAction: 'send_message',
               targetMessageId: 'msg_appointment_confirmed'
             },
             {
               buttonId: 'btn_payment_help',
-              title: '❓ Payment Help',
+              title: ' Payment Help',
               triggerId: 'trigger_payment_help',
               nextAction: 'send_message',
               targetMessageId: 'msg_payment_support'
             },
             {
               buttonId: 'btn_cancel_payment',
-              title: '❌ Cancel',
+              title: ' Cancel',
               triggerId: 'trigger_cancel_payment',
               nextAction: 'send_message',
               targetMessageId: 'msg_welcome_interactive'
@@ -299,27 +299,27 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-        header: 'Appointment Confirmed! 🎉',
-        body: 'Booking Confirmed:\n\n🎫 Token: GM-015\n🩺 {{doctorName}}\n📅 25 Oct 2025\n⏰ Time: {{slotTime}}\n🏥 Room 201, 2nd Floor\n\nPlease arrive 15 minutes before your appointment.',
+        header: 'Appointment Confirmed! ',
+        body: 'Booking Confirmed:\n\n Token: GM-015\n {{doctorName}}\n 25 Oct 2025\n Time: {{slotTime}}\n Room 201, 2nd Floor\n\nPlease arrive 15 minutes before your appointment.',
           footer: 'Thank you for choosing our hospital',
           buttons: [
             {
               buttonId: 'btn_add_calendar',
-              title: '📅 Add to Calendar',
+              title: ' Add to Calendar',
               triggerId: 'trigger_add_calendar',
               nextAction: 'send_message',
               targetMessageId: 'msg_calendar_added'
             },
             {
               buttonId: 'btn_book_another',
-              title: '➕ Book Another',
+              title: ' Book Another',
               triggerId: 'trigger_book_another',
               nextAction: 'send_message',
               targetMessageId: 'msg_book_interactive'
             },
             {
               buttonId: 'btn_main_menu',
-              title: '🏠 Main Menu',
+              title: ' Main Menu',
               triggerId: 'trigger_main_menu',
               nextAction: 'send_message',
               targetMessageId: 'msg_welcome_interactive'
@@ -335,7 +335,7 @@ class MessageLibraryService {
         type: 'interactive_list',
         status: 'published',
         contentPayload: {
-          header: 'Laboratory Services 🧪',
+          header: 'Laboratory Services ',
           body: 'Choose the type of lab test you need:',
           footer: 'All tests include home collection option',
           buttonText: 'Select Test',
@@ -385,27 +385,27 @@ class MessageLibraryService {
         type: 'interactive_button',
         status: 'published',
         contentPayload: {
-          header: '🚨 Emergency Services',
+          header: ' Emergency Services',
           body: 'This is for medical emergencies only. If this is a life-threatening situation, please call 108 immediately.\n\nFor non-emergency urgent care, choose an option:',
           footer: 'Emergency helpline: 108',
           buttons: [
             {
               buttonId: 'btn_urgent_care',
-              title: '🏥 Urgent Care',
+              title: ' Urgent Care',
               triggerId: 'trigger_urgent_care',
               nextAction: 'send_message',
               targetMessageId: 'msg_urgent_care_info'
             },
             {
               buttonId: 'btn_ambulance',
-              title: '🚑 Book Ambulance',
+              title: ' Book Ambulance',
               triggerId: 'trigger_ambulance',
               nextAction: 'send_message',
               targetMessageId: 'msg_ambulance_booking'
             },
             {
               buttonId: 'btn_call_emergency',
-              title: '📞 Call Emergency',
+              title: ' Call Emergency',
               triggerId: 'trigger_call_emergency',
               nextAction: 'send_message',
               targetMessageId: 'msg_emergency_contact'
@@ -674,15 +674,15 @@ class MessageLibraryService {
 
     // If sanitization produced an empty header, fall back to known defaults for common messages
     const defaults = {
-      msg_confirm_appointment: 'Confirm Your Appointment ✅',
-      msg_payment_link: 'Payment Required 💳',
-      msg_appointment_confirmed: 'Appointment Confirmed! 🎉',
-      msg_book_interactive: 'Book Your Appointment 📅',
-      msg_doctor_selection: 'Available Doctors 👩‍⚕️',
-      msg_welcome_interactive: 'Welcome to Hospital Services! 🏥',
+      msg_confirm_appointment: 'Confirm Your Appointment ',
+      msg_payment_link: 'Payment Required ',
+      msg_appointment_confirmed: 'Appointment Confirmed! ',
+      msg_book_interactive: 'Book Your Appointment ',
+      msg_doctor_selection: 'Available Doctors ',
+      msg_welcome_interactive: 'Welcome to Hospital Services! ',
       msg_existing_patient_select: 'Existing Patients',
-      msg_lab_interactive: 'Laboratory Services 🧪',
-      msg_emergency: '🚨 Emergency Services'
+      msg_lab_interactive: 'Laboratory Services ',
+      msg_emergency: ' Emergency Services'
     };
 
     if (!s || s.length === 0) {
@@ -768,14 +768,14 @@ class MessageLibraryService {
     }
     
     if (matchingTrigger) {
-      console.log(`🎯 Found interactive trigger: ${matchingTrigger.triggerId} for ${interactiveData.type}`);
+      console.log(` Found interactive trigger: ${matchingTrigger.triggerId} for ${interactiveData.type}`);
       return {
         trigger: matchingTrigger,
         nextMessage: this.getMessageById(matchingTrigger.targetId)
       };
     }
     
-    console.log(`📝 No matching trigger found for interactive response:`, interactiveData);
+    console.log(` No matching trigger found for interactive response:`, interactiveData);
     return null;
   }
 
@@ -813,7 +813,7 @@ class MessageLibraryService {
     try {
       if (messageEntry && messageEntry.messageId === 'msg_confirm_appointment') {
         messageEntry.contentPayload = messageEntry.contentPayload || {};
-        messageEntry.contentPayload.header = 'Confirm Your Appointment ✅';
+        messageEntry.contentPayload.header = 'Confirm Your Appointment ';
         // Attempt to inject selected doctor's name and slot/time from pending booking for this recipient
         try {
           const pending = await bookingService.getPendingBookingForUser(recipientPhone).catch(() => null);
@@ -853,7 +853,7 @@ class MessageLibraryService {
 
               for (let i = 0; i < lines.length; i++) {
                 const l = lines[i];
-                // Replace date line (contains calendar emoji or '📅' or a month name)
+                // Replace date line (contains calendar emoji or '' or a month name)
                 if (!replacedDate && /📅|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(l)) {
                   lines[i] = datePart || slotStr;
                   replacedDate = true;
@@ -878,7 +878,7 @@ class MessageLibraryService {
             }
 
             messageEntry.contentPayload.body = bodyStr;
-            console.log('ℹ️ Injected pending booking info into confirm body', { doctorName: doctorName || null, slot: rawSlot || null });
+            console.log(' Injected pending booking info into confirm body', { doctorName: doctorName || null, slot: rawSlot || null });
           }
         } catch (e) {
           console.warn('Could not inject doctorName/slot into confirm body:', e?.message || e);
@@ -895,7 +895,7 @@ class MessageLibraryService {
           // Only perform replacement when header itself appears to contain a doctor's name (contains 'Dr')
           if (nameHeader && /Dr\.?\s*/i.test(nameHeader) && /Dr\.?\s+[^\n\r]*/i.test(bodyStr)) {
           try {
-            // If header contains extra suffix (e.g., 'Dr. X - Available Slots 📅'), extract only the doctor portion
+            // If header contains extra suffix (e.g., 'Dr. X - Available Slots '), extract only the doctor portion
             let doctorOnly = nameHeader;
             if (doctorOnly.includes(' - ')) {
               doctorOnly = doctorOnly.split(' - ')[0].trim();
@@ -904,7 +904,7 @@ class MessageLibraryService {
             }
             const replaced = bodyStr.replace(/Dr\.?\s+[^\n\r]*/i, doctorOnly);
             messageEntry.contentPayload.body = replaced;
-            console.log('ℹ️ Confirm body doctor name replaced with header (doctor-only):', doctorOnly);
+            console.log(' Confirm body doctor name replaced with header (doctor-only):', doctorOnly);
           } catch (e) {
             console.warn('Could not replace doctor name in confirm body:', e?.message || e);
           }
