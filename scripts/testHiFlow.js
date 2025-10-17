@@ -38,7 +38,7 @@ async function testHiFlow() {
     console.log('📤 Sending test "Hi" message from +1234567890');
     console.log('Expected behavior:');
     console.log('1. Check if +1234567890 exists in Firebase patients');
-    console.log('2. If not found → Send WhatsApp flow 737535792667128');
+    console.log('2. If not found → Send WhatsApp flow 2249542565518793');
     console.log('3. If found → Send welcome interactive message\n');
     
     await webhookService.handleWebhook(testWebhookData);
